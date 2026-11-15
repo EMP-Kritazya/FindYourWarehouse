@@ -1,0 +1,57 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  --color-bg: #0a0d12;
+  --color-panel: #11151c;
+  --color-panel-2: #171c25;
+  --color-panel-3: #1f2530;
+  --color-line: #262d3a;
+  --color-line-2: #333b4a;
+  --color-ink: #e8ecf2;
+  --color-ink-2: #a3adbd;
+  --color-ink-3: #6b7587;
+  --color-accent: #4fd1c5;
+  --color-accent-2: #2a9d93;
+  --color-good: #4ade80;
+  --color-warn: #fbbf24;
+  --color-bad: #f87171;
+}
+
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01", "tnum";
+  overflow: hidden;
+}
+
+.glass {
+  background: color-mix(in oklab, var(--color-panel) 88%, transparent);
+  backdrop-filter: blur(14px) saturate(140%);
+  border: 1px solid var(--color-line);
+  box-shadow: 0 10px 40px -10px rgb(0 0 0 / 0.6);
+}
+
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-2) transparent; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--color-panel-2) 0%, var(--color-panel-3) 50%, var(--color-panel-2) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 6px;
+}
+@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+
+@keyframes drawer-in { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+.drawer-in { animation: drawer-in 260ms cubic-bezier(.2,.8,.2,1); }
+@keyframes fade-up { from { transform: translateY(6px); opacity: 0 } to { transform: none; opacity: 1 } }
+.fade-up { animation: fade-up 220ms ease-out both; }
+
+.maplibregl-ctrl-attrib { display: none; }
+
+/* S3 YardView embedded in the app: its left panel duplicates the card's Test tab and would cover the parcel */
+.pi-yard [data-testid="yard-view"] > .glass.left-3.top-3 { display: none; }

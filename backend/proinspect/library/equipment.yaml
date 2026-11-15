@@ -1,0 +1,280 @@
+# Warehouse vehicles and equipment: the pre-saved library the simulator and the Interior Scout use.
+#
+# Units: feet, lb, mph, seconds. Values are TYPICAL mid-range figures for common models (they vary by model and
+# options); `basis` says where each kind of number comes from. Agents must present them as "typical", not as the
+# spec of a specific truck. Users can clone and edit any entry.
+#
+#   min_aisle_ft     right-angle stacking aisle (rack face to rack face) needed to put away a 40x48 pallet
+#   lift_height_ft   max fork height of a typical configuration (sets the usable rack height with clear height)
+#   turn_radius_ft   outside turning radius
+#   speed_mph        [empty, loaded] travel speed; sim uses 80% of these as average cruising speed
+#   lift_fpm         lift speed loaded, feet per minute
+#   power            lpg | electric_lead_acid | electric_li_ion | diesel | manual
+#   charge           what the building must provide (power draw / charger needs)
+#   floor            floor requirement (FF/FL = floor flatness/levelness numbers; VNA needs "superflat")
+#   glb              3D model id for the web scene
+
+equipment:
+  counterbalance_lpg:
+    name: Counterbalance forklift (LPG)
+    category: forklift
+    dims_ft: {length: 11.5, width: 4.0, height_mast_lowered: 7.0}   # incl. forks
+    capacity_lb: 5000
+    lift_height_ft: 15
+    turn_radius_ft: 7.5
+    min_aisle_ft: 12.5
+    speed_mph: [11, 10]
+    lift_fpm: 100
+    power: lpg
+    charge: {type: propane_cylinder_swap, building_needs: "outdoor propane cage; ventilation (CO) if used indoors"}
+    indoor_ok: true
+    outdoor_ok: true
+    floor: standard
+    dock_ok: true
+    glb: forklift_counterbalance
+    basis: "Typical 5,000 lb pneumatic/cushion LPG trucks (Toyota 8-series, Hyster H50 class spec ranges)"
+
+  counterbalance_electric:
+    name: Counterbalance forklift (electric)
+    category: forklift
+    dims_ft: {length: 10.5, width: 3.8, height_mast_lowered: 7.0}
+    capacity_lb: 4000
+    lift_height_ft: 15
+    turn_radius_ft: 6.5
+    min_aisle_ft: 12.0
+    speed_mph: [10, 9]
+    lift_fpm: 90
+    power: electric_li_ion
+    charge: {type: opportunity_charging, kw_per_charger: 6, building_needs: "208-480 V charging circuits"}
+    indoor_ok: true
+    outdoor_ok: true
+    floor: standard
+    dock_ok: true
+    glb: forklift_counterbalance
+    basis: "Typical 4,000 lb 4-wheel electric counterbalance trucks (Crown FC, Toyota 8FBE class)"
+
+  reach_truck:
+    name: Reach truck
+    category: narrow_aisle
+    dims_ft: {length: 7.5, width: 4.0, height_mast_lowered: 9.0}
+    capacity_lb: 3500
+    lift_height_ft: 32
+    turn_radius_ft: 5.5
+    min_aisle_ft: 9.0
+    speed_mph: [7, 6.5]
+    lift_fpm: 90
+    power: electric_lead_acid
+    charge: {type: battery_change_or_charge, kw_per_charger: 8, building_needs: "480 V 3-phase charging area, eyewash station"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: "flat (FF35/FL25 or better recommended above 25 ft)"
+    dock_ok: false     # does not drive into trailers
+    glb: reach_truck
+    basis: "Typical stand-up reach trucks (Crown RR/RM, Raymond 7000 series spec ranges)"
+
+  order_picker:
+    name: Order picker
+    category: narrow_aisle
+    dims_ft: {length: 8.5, width: 3.5, height_mast_lowered: 8.0}
+    capacity_lb: 3000
+    lift_height_ft: 30      # platform height
+    turn_radius_ft: 6.0
+    min_aisle_ft: 6.0       # wire- or rail-guided narrow aisle
+    speed_mph: [6.5, 6]
+    lift_fpm: 80
+    power: electric_lead_acid
+    charge: {type: battery_charge, kw_per_charger: 6, building_needs: "480 V charging area; wire guidance or rack rails in aisles"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: "flat; guidance wire or rails"
+    dock_ok: false
+    glb: order_picker
+    basis: "Typical man-up order pickers (Crown SP, Raymond 5000 series)"
+
+  vna_turret:
+    name: Very-narrow-aisle turret truck
+    category: narrow_aisle
+    dims_ft: {length: 14.0, width: 5.5, height_mast_lowered: 12.0}
+    capacity_lb: 3000
+    lift_height_ft: 45
+    turn_radius_ft: 9.0     # turns only at aisle ends; transfer aisles need ~14 ft
+    min_aisle_ft: 6.0
+    speed_mph: [6, 5.5]
+    lift_fpm: 75
+    power: electric_lead_acid
+    charge: {type: battery_change, kw_per_charger: 12, building_needs: "480 V 3-phase; battery change room"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: "superflat (FF100/FL100 in aisles); wire guidance"
+    min_clear_height_ft: 30   # rarely economic below this
+    dock_ok: false
+    glb: vna_turret
+    basis: "Typical turret trucks (Crown TSP, Raymond Swing-Reach); superflat floor is a standard requirement"
+
+  pallet_jack_electric:
+    name: Electric pallet jack
+    category: horizontal
+    dims_ft: {length: 7.0, width: 2.7, height_mast_lowered: 4.5}
+    capacity_lb: 4500
+    lift_height_ft: 0.5
+    turn_radius_ft: 5.5
+    min_aisle_ft: 7.0
+    speed_mph: [4, 3.5]
+    lift_fpm: 0
+    power: electric_li_ion
+    charge: {type: onboard_110v, kw_per_charger: 1, building_needs: "110 V outlets"}
+    indoor_ok: true
+    outdoor_ok: true
+    floor: standard
+    dock_ok: true
+    glb: pallet_jack
+    basis: "Typical walkie/rider pallet jacks (Crown WP/PE, Toyota 8HBW)"
+
+  walkie_stacker:
+    name: Walkie stacker
+    category: light_lift
+    dims_ft: {length: 7.0, width: 3.0, height_mast_lowered: 7.0}
+    capacity_lb: 3000
+    lift_height_ft: 13
+    turn_radius_ft: 5.5
+    min_aisle_ft: 8.0
+    speed_mph: [3.5, 3]
+    lift_fpm: 50
+    power: electric_lead_acid
+    charge: {type: onboard_110v, kw_per_charger: 1.5, building_needs: "110 V outlets"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: standard
+    dock_ok: true
+    glb: walkie_stacker
+    basis: "Typical walkie stackers (Crown ST/SX, Big Joe)"
+
+  amr_goods_to_person:
+    name: Autonomous mobile robot (goods-to-person)
+    category: robot
+    dims_ft: {length: 3.5, width: 2.5, height_mast_lowered: 1.3}
+    capacity_lb: 1300
+    lift_height_ft: 0.2
+    turn_radius_ft: 0          # turns in place
+    min_aisle_ft: 4.0
+    speed_mph: [3.4, 2.7]      # ~1.5 m/s / 1.2 m/s
+    lift_fpm: 0
+    power: electric_li_ion
+    charge: {type: autonomous_dock, kw_per_charger: 2, building_needs: "1 charging dock per ~8 robots; reliable Wi-Fi"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: "clean, level; no ramps over ~5%"
+    dock_ok: false
+    glb: amr
+    basis: "Typical shelf-lifting AMRs (Geek+ P-series, Locus-style); speeds 1-2 m/s"
+
+  autonomous_forklift:
+    name: Autonomous forklift (AGV)
+    category: robot
+    dims_ft: {length: 8.0, width: 3.5, height_mast_lowered: 7.0}
+    capacity_lb: 3000
+    lift_height_ft: 20
+    turn_radius_ft: 6.0
+    min_aisle_ft: 10.0
+    speed_mph: [4.5, 3.5]
+    lift_fpm: 60
+    power: electric_li_ion
+    charge: {type: autonomous_dock, kw_per_charger: 6, building_needs: "charging docks; mapped, marked lanes"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: standard
+    dock_ok: false
+    glb: agv_forklift
+    basis: "Typical autonomous pallet movers (Seegrid, Vecna, OTTO Lifter class); slower than manned trucks"
+
+  tugger_train:
+    name: Tugger train (tractor + 3 carts)
+    category: horizontal
+    dims_ft: {length: 30.0, width: 4.0, height_mast_lowered: 5.0}
+    capacity_lb: 6000
+    lift_height_ft: 0
+    turn_radius_ft: 12.0       # train needs wider loop corners
+    min_aisle_ft: 10.0
+    speed_mph: [8, 6]
+    lift_fpm: 0
+    power: electric_lead_acid
+    charge: {type: battery_charge, kw_per_charger: 6, building_needs: "charging area"}
+    indoor_ok: true
+    outdoor_ok: true
+    floor: standard
+    dock_ok: false
+    glb: tugger
+    basis: "Typical tow tractors (Toyota/Taylor-Dunn) with 3 kitting carts; loop routes"
+
+  conveyor_sorter:
+    name: Conveyor / sorter segment (per 100 ft)
+    category: fixed
+    dims_ft: {length: 100.0, width: 3.5, height_mast_lowered: 3.0}
+    capacity_lb: 75             # per item
+    throughput_per_hr: 3000     # cartons/hr for a simple shoe or pop-up sorter
+    speed_mph: [2.3, 2.3]       # ~200 fpm
+    power: electric_grid
+    charge: {type: none, building_needs: "480 V 3-phase; ~10 kW per 100 ft of powered conveyor"}
+    indoor_ok: true
+    outdoor_ok: false
+    floor: standard
+    min_clear_height_ft: 14     # for mezzanine-free overhead runs
+    glb: conveyor
+    basis: "Typical powered roller / sliding-shoe sorters; 150-300 fpm"
+
+  yard_truck:
+    name: Yard truck (terminal tractor)
+    category: yard
+    dims_ft: {length: 16.0, width: 8.5, height_mast_lowered: 11.0}
+    capacity_lb: 80000           # towed
+    turn_radius_ft: 18.0         # tractor alone; with a 53 ft trailer see semi_53
+    speed_mph: [25, 15]
+    power: diesel
+    charge: {type: fuel, building_needs: "fuel delivery or EV yard-truck charger (~100 kW)"}
+    indoor_ok: false
+    outdoor_ok: true
+    glb: yard_truck
+    basis: "Typical terminal tractors (Kalmar Ottawa T2, Capacity TJ5000)"
+
+  semi_53:
+    name: Tractor + 53 ft trailer
+    category: road_vehicle
+    dims_ft: {length: 73.5, width: 8.5, height: 13.5}   # WB-67 design vehicle
+    trailer_ft: 53
+    turn_radius_ft: 45.0          # outside, AASHTO WB-67 minimum design turning radius
+    truck_court_depth_ft: 130     # typical recommended dock apron + maneuvering depth (min ~120 ft)
+    dock_door_ft: [9, 10]         # w x h, standard dock door
+    dock_height_in: [48, 52]
+    approach_speed_mph: 5
+    dock_turn_min: 35             # typical live unload of a floor-loaded/palletized 53 ft trailer
+    pallets_per_load: 26          # single-stacked 40x48 pallets
+    glb: semi_53
+    basis: "AASHTO Green Book WB-67 design vehicle; common industrial site-planning guidance (120-135 ft truck courts)"
+
+  box_truck_26:
+    name: 26 ft box truck
+    category: road_vehicle
+    dims_ft: {length: 35.0, width: 8.5, height: 12.5}
+    turn_radius_ft: 30.0
+    truck_court_depth_ft: 70
+    dock_door_ft: [9, 10]
+    dock_height_in: [44, 48]
+    approach_speed_mph: 5
+    dock_turn_min: 20
+    pallets_per_load: 12
+    glb: box_truck
+    basis: "Typical class 6-7 box trucks (Isuzu FTR, Freightliner M2 with 26 ft body)"
+
+  last_mile_van:
+    name: Last-mile delivery van
+    category: road_vehicle
+    dims_ft: {length: 20.0, width: 7.0, height: 9.5}
+    turn_radius_ft: 22.0
+    truck_court_depth_ft: 45
+    dock_door_ft: [10, 12]         # usually loads at grade through drive-in doors
+    dock_height_in: [0, 0]
+    approach_speed_mph: 5
+    dock_turn_min: 12
+    packages_per_load: 200
+    glb: van
+    basis: "Typical high-roof cargo vans (Ford Transit, Ram ProMaster, Rivian EDV)"

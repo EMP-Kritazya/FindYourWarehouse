@@ -1,0 +1,1018 @@
+{
+ "property_id": 12896757,
+ "version": 3,
+ "updated_at": "2026-11-14T23:00:00Z",
+ "frame": {
+  "lat0": 29.59681015801914,
+  "lon0": -95.37298356577523
+ },
+ "buildings": [
+  {
+   "id": 0,
+   "outline": [
+    [
+     62.5,
+     28.55
+    ],
+    [
+     63.82,
+     -31.49
+    ],
+    [
+     21.37,
+     -32.78
+    ],
+    [
+     21.34,
+     -31.98
+    ],
+    [
+     -21.84,
+     -33.62
+    ],
+    [
+     -21.86,
+     -33.05
+    ],
+    [
+     -34.55,
+     -33.34
+    ],
+    [
+     -34.53,
+     -33.83
+    ],
+    [
+     -57.61,
+     -34.46
+    ],
+    [
+     -57.63,
+     -33.75
+    ],
+    [
+     -62.3,
+     -33.86
+    ],
+    [
+     -64.07,
+     24.18
+    ],
+    [
+     -63.28,
+     26.28
+    ],
+    [
+     -61.95,
+     25.78
+    ],
+    [
+     -60.76,
+     27.98
+    ],
+    [
+     -58.71,
+     29.38
+    ],
+    [
+     -58.82,
+     32.76
+    ],
+    [
+     -45.9,
+     33.15
+    ],
+    [
+     -45.86,
+     31.64
+    ],
+    [
+     -7.54,
+     32.39
+    ],
+    [
+     -7.58,
+     34.37
+    ],
+    [
+     3.1,
+     34.7
+    ],
+    [
+     4.73,
+     33.14
+    ],
+    [
+     5.9,
+     32.69
+    ],
+    [
+     44.6,
+     33.62
+    ],
+    [
+     44.54,
+     35.83
+    ],
+    [
+     56.79,
+     36.21
+    ],
+    [
+     56.87,
+     33.21
+    ],
+    [
+     57.49,
+     31.92
+    ],
+    [
+     62.5,
+     28.55
+    ]
+   ],
+   "edges": [
+    {
+     "id": 0,
+     "a": [
+      62.5,
+      28.55
+     ],
+     "b": [
+      63.82,
+      -31.49
+     ],
+     "facing": "E",
+     "len_m": 60.05
+    },
+    {
+     "id": 1,
+     "a": [
+      63.82,
+      -31.49
+     ],
+     "b": [
+      21.37,
+      -32.78
+     ],
+     "facing": "S",
+     "len_m": 42.47
+    },
+    {
+     "id": 2,
+     "a": [
+      21.37,
+      -32.78
+     ],
+     "b": [
+      21.34,
+      -31.98
+     ],
+     "facing": "E",
+     "len_m": 0.8
+    },
+    {
+     "id": 3,
+     "a": [
+      21.34,
+      -31.98
+     ],
+     "b": [
+      -21.84,
+      -33.62
+     ],
+     "facing": "S",
+     "len_m": 43.21
+    },
+    {
+     "id": 4,
+     "a": [
+      -21.84,
+      -33.62
+     ],
+     "b": [
+      -21.86,
+      -33.05
+     ],
+     "facing": "W",
+     "len_m": 0.57
+    },
+    {
+     "id": 5,
+     "a": [
+      -21.86,
+      -33.05
+     ],
+     "b": [
+      -34.55,
+      -33.34
+     ],
+     "facing": "S",
+     "len_m": 12.69
+    },
+    {
+     "id": 7,
+     "a": [
+      -34.53,
+      -33.83
+     ],
+     "b": [
+      -57.61,
+      -34.46
+     ],
+     "facing": "S",
+     "len_m": 23.09
+    },
+    {
+     "id": 8,
+     "a": [
+      -57.61,
+      -34.46
+     ],
+     "b": [
+      -57.63,
+      -33.75
+     ],
+     "facing": "W",
+     "len_m": 0.71
+    },
+    {
+     "id": 9,
+     "a": [
+      -57.63,
+      -33.75
+     ],
+     "b": [
+      -62.3,
+      -33.86
+     ],
+     "facing": "S",
+     "len_m": 4.67
+    },
+    {
+     "id": 10,
+     "a": [
+      -62.3,
+      -33.86
+     ],
+     "b": [
+      -64.07,
+      24.18
+     ],
+     "facing": "W",
+     "len_m": 58.07
+    },
+    {
+     "id": 11,
+     "a": [
+      -64.07,
+      24.18
+     ],
+     "b": [
+      -63.28,
+      26.28
+     ],
+     "facing": "W",
+     "len_m": 2.24
+    },
+    {
+     "id": 12,
+     "a": [
+      -63.28,
+      26.28
+     ],
+     "b": [
+      -61.95,
+      25.78
+     ],
+     "facing": "S",
+     "len_m": 1.42
+    },
+    {
+     "id": 13,
+     "a": [
+      -61.95,
+      25.78
+     ],
+     "b": [
+      -60.76,
+      27.98
+     ],
+     "facing": "W",
+     "len_m": 2.5
+    },
+    {
+     "id": 14,
+     "a": [
+      -60.76,
+      27.98
+     ],
+     "b": [
+      -58.71,
+      29.38
+     ],
+     "facing": "N",
+     "len_m": 2.48
+    },
+    {
+     "id": 15,
+     "a": [
+      -58.71,
+      29.38
+     ],
+     "b": [
+      -58.82,
+      32.76
+     ],
+     "facing": "W",
+     "len_m": 3.38
+    },
+    {
+     "id": 16,
+     "a": [
+      -58.82,
+      32.76
+     ],
+     "b": [
+      -45.9,
+      33.15
+     ],
+     "facing": "N",
+     "len_m": 12.93
+    },
+    {
+     "id": 17,
+     "a": [
+      -45.9,
+      33.15
+     ],
+     "b": [
+      -45.86,
+      31.64
+     ],
+     "facing": "W",
+     "len_m": 1.51
+    },
+    {
+     "id": 18,
+     "a": [
+      -45.86,
+      31.64
+     ],
+     "b": [
+      -7.54,
+      32.39
+     ],
+     "facing": "N",
+     "len_m": 38.33
+    },
+    {
+     "id": 19,
+     "a": [
+      -7.54,
+      32.39
+     ],
+     "b": [
+      -7.58,
+      34.37
+     ],
+     "facing": "E",
+     "len_m": 1.98
+    },
+    {
+     "id": 20,
+     "a": [
+      -7.58,
+      34.37
+     ],
+     "b": [
+      3.1,
+      34.7
+     ],
+     "facing": "N",
+     "len_m": 10.69
+    },
+    {
+     "id": 21,
+     "a": [
+      3.1,
+      34.7
+     ],
+     "b": [
+      4.73,
+      33.14
+     ],
+     "facing": "N",
+     "len_m": 2.26
+    },
+    {
+     "id": 22,
+     "a": [
+      4.73,
+      33.14
+     ],
+     "b": [
+      5.9,
+      32.69
+     ],
+     "facing": "N",
+     "len_m": 1.25
+    },
+    {
+     "id": 23,
+     "a": [
+      5.9,
+      32.69
+     ],
+     "b": [
+      44.6,
+      33.62
+     ],
+     "facing": "N",
+     "len_m": 38.71
+    },
+    {
+     "id": 24,
+     "a": [
+      44.6,
+      33.62
+     ],
+     "b": [
+      44.54,
+      35.83
+     ],
+     "facing": "E",
+     "len_m": 2.21
+    },
+    {
+     "id": 25,
+     "a": [
+      44.54,
+      35.83
+     ],
+     "b": [
+      56.79,
+      36.21
+     ],
+     "facing": "N",
+     "len_m": 12.26
+    },
+    {
+     "id": 26,
+     "a": [
+      56.79,
+      36.21
+     ],
+     "b": [
+      56.87,
+      33.21
+     ],
+     "facing": "E",
+     "len_m": 3.0
+    },
+    {
+     "id": 27,
+     "a": [
+      56.87,
+      33.21
+     ],
+     "b": [
+      57.49,
+      31.92
+     ],
+     "facing": "E",
+     "len_m": 1.43
+    },
+    {
+     "id": 28,
+     "a": [
+      57.49,
+      31.92
+     ],
+     "b": [
+      62.5,
+      28.55
+     ],
+     "facing": "N",
+     "len_m": 6.04
+    }
+   ]
+  }
+ ],
+ "gate": {
+  "x": -4.68,
+  "y": 63.25,
+  "lon": -95.3730319,
+  "lat": 29.5973822,
+  "source": "inferred"
+ },
+ "registration": {
+  "model_id": "QHMtBN5Nnrc",
+  "flip": 0,
+  "confirmed_by_user": false,
+  "confidence": 0.44,
+  "note": "Docks face south; the scan wall is picked by court depth."
+ },
+ "doors": [
+  {
+   "id": "k1",
+   "building": 0,
+   "edge": 1,
+   "s_m": 4.0,
+   "x": 59.82,
+   "y": -31.61,
+   "lon": -95.3723655,
+   "lat": 29.5965243,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.8,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "trailer",
+     "conf": 0.8,
+     "ref": "ortho:trailer:0",
+     "note": "docked trailer, nose-out"
+    }
+   ]
+  },
+  {
+   "id": "k2",
+   "building": 0,
+   "edge": 1,
+   "s_m": 8.2,
+   "x": 55.62,
+   "y": -31.74,
+   "lon": -95.3724089,
+   "lat": 29.5965231,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.55,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k3",
+   "building": 0,
+   "edge": 1,
+   "s_m": 12.4,
+   "x": 51.43,
+   "y": -31.87,
+   "lon": -95.3724523,
+   "lat": 29.596522,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.55,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k4",
+   "building": 0,
+   "edge": 1,
+   "s_m": 16.6,
+   "x": 47.23,
+   "y": -31.99,
+   "lon": -95.3724957,
+   "lat": 29.5965208,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.8,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "trailer",
+     "conf": 0.8,
+     "ref": "ortho:trailer:3",
+     "note": "docked trailer, nose-out"
+    }
+   ]
+  },
+  {
+   "id": "k5",
+   "building": 0,
+   "edge": 1,
+   "s_m": 20.8,
+   "x": 43.03,
+   "y": -32.12,
+   "lon": -95.372539,
+   "lat": 29.5965197,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.55,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k6",
+   "building": 0,
+   "edge": 1,
+   "s_m": 25.0,
+   "x": 38.83,
+   "y": -32.25,
+   "lon": -95.3725824,
+   "lat": 29.5965185,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.55,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k7",
+   "building": 0,
+   "edge": 1,
+   "s_m": 29.2,
+   "x": 34.63,
+   "y": -32.38,
+   "lon": -95.3726258,
+   "lat": 29.5965174,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.8,
+   "status": "inferred",
+   "evidence": [
+    {
+     "type": "costar_span",
+     "conf": 0.4,
+     "ref": "costar",
+     "note": "span fill at observed pitch"
+    }
+   ]
+  },
+  {
+   "id": "k8",
+   "building": 0,
+   "edge": 1,
+   "s_m": 33.4,
+   "x": 30.44,
+   "y": -32.5,
+   "lon": -95.3726691,
+   "lat": 29.5965162,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "inferred",
+   "evidence": [
+    {
+     "type": "costar_span",
+     "conf": 0.4,
+     "ref": "costar",
+     "note": "span fill at observed pitch"
+    }
+   ]
+  },
+  {
+   "id": "k9",
+   "building": 0,
+   "edge": 1,
+   "s_m": 37.6,
+   "x": 26.24,
+   "y": -32.63,
+   "lon": -95.3727125,
+   "lat": 29.596515,
+   "normal": [
+    0.03,
+    -1.0
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "unknown",
+   "kind_conf": 0.3,
+   "status": "inferred",
+   "evidence": [
+    {
+     "type": "costar_span",
+     "conf": 0.4,
+     "ref": "costar",
+     "note": "span fill at observed pitch"
+    }
+   ]
+  },
+  {
+   "id": "k10",
+   "building": 0,
+   "edge": 3,
+   "s_m": 3.0,
+   "x": 18.34,
+   "y": -32.09,
+   "lon": -95.3727941,
+   "lat": 29.5965199,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k11",
+   "building": 0,
+   "edge": 3,
+   "s_m": 7.2,
+   "x": 14.15,
+   "y": -32.25,
+   "lon": -95.3728374,
+   "lat": 29.5965185,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k12",
+   "building": 0,
+   "edge": 3,
+   "s_m": 11.4,
+   "x": 9.95,
+   "y": -32.41,
+   "lon": -95.3728808,
+   "lat": 29.596517,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k13",
+   "building": 0,
+   "edge": 3,
+   "s_m": 15.6,
+   "x": 5.75,
+   "y": -32.57,
+   "lon": -95.3729241,
+   "lat": 29.5965156,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k14",
+   "building": 0,
+   "edge": 3,
+   "s_m": 19.8,
+   "x": 1.55,
+   "y": -32.73,
+   "lon": -95.3729675,
+   "lat": 29.5965141,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k15",
+   "building": 0,
+   "edge": 3,
+   "s_m": 24.0,
+   "x": -2.64,
+   "y": -32.89,
+   "lon": -95.3730109,
+   "lat": 29.5965127,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "rejected",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k16",
+   "building": 0,
+   "edge": 3,
+   "s_m": 28.2,
+   "x": -6.84,
+   "y": -33.05,
+   "lon": -95.3730542,
+   "lat": 29.5965113,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k17",
+   "building": 0,
+   "edge": 3,
+   "s_m": 32.4,
+   "x": -11.04,
+   "y": -33.21,
+   "lon": -95.3730976,
+   "lat": 29.5965098,
+   "normal": [
+    0.038,
+    -0.999
+   ],
+   "width_ft": 9.0,
+   "height_ft": 10.0,
+   "kind": "dock_high",
+   "kind_conf": 0.6,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.6,
+     "ref": "oblique-south",
+     "note": "SAM3 door box"
+    }
+   ]
+  },
+  {
+   "id": "k18",
+   "building": 0,
+   "edge": 0,
+   "s_m": 20.0,
+   "x": 62.94,
+   "y": 8.55,
+   "lon": -95.3723333,
+   "lat": 29.5968875,
+   "normal": [
+    1.0,
+    0.022
+   ],
+   "width_ft": 12.0,
+   "height_ft": 14.0,
+   "kind": "drive_in",
+   "kind_conf": 0.55,
+   "status": "proposed",
+   "evidence": [
+    {
+     "type": "oblique",
+     "conf": 0.5,
+     "ref": "oblique-east",
+     "note": "12 x 14 ft opening, no truck well"
+    }
+   ]
+  }
+ ],
+ "summary": {
+  "costar_docks": 23,
+  "costar_drive_ins": 2,
+  "detected_doors": 9,
+  "docked_trailers": 3,
+  "confirmed": 0,
+  "estimate": {
+   "value": 17,
+   "lo": 9,
+   "hi": 23,
+   "status": "estimated",
+   "basis": "9 doors seen in obliques and 3 docked trailers on the south facade; CoStar reports 23."
+  }
+ }
+}

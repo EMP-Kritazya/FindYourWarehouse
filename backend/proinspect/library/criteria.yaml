@@ -1,0 +1,208 @@
+# What to compare for each kind of operation (CONTRACTS_v3 §2). analytics.py reads this file; nothing here is data
+# about a building. Each operation picks 5-7 criteria, each with a weight (1-5) and a one-line `why`.
+#   level D  = deal-breaker: a VERIFIED value past `min`/`max` makes the building "fail"; an estimate or unknown
+#              only "flags" it (an estimate is never proof of failure).
+#   level N  = nice-to-have: it only moves the comparison.
+# `tol` is the difference below which two values are a tie (measurement error / practical significance):
+#   abs = absolute units, rel = share of the larger value; the larger of the two applies.
+
+criteria:
+  docks_total:            {label: "Dock-high doors", unit: "doors", better: higher, tol: {abs: 1}, check: "open the dock editor or run dock evidence"}
+  docks_per_10ksf:        {label: "Docks per 10k SF", unit: "per 10k SF", better: higher, tol: {abs: 0.1, rel: 0.05}, check: "open the dock editor or run dock evidence"}
+  dock_turn_capacity_est: {label: "Trailer turns per day (est.)", unit: "turns/day", better: higher, tol: {rel: 0.1}, check: "needs a dock-high door count"}
+  cross_dock_config:      {label: "Cross-dock layout", unit: "", better: higher, tol: {abs: 0}, check: "check docks on opposite walls in the aerial"}
+  truck_court_ft:         {label: "Truck court depth", unit: "ft", better: higher, tol: {abs: 10}, check: "run the yard test"}
+  trailer_staging:        {label: "Paved yard (trailer staging)", unit: "SF", better: higher, tol: {rel: 0.15}, check: "check the aerial"}
+  clear_height_ft:        {label: "Clear height", unit: "ft", better: higher, tol: {abs: 2}, check: "walk the scan or ask the broker"}
+  column_spacing_ft:      {label: "Column spacing (tighter bay)", unit: "ft", better: higher, tol: {abs: 4}, check: "walk the scan"}
+  usable_floor:           {label: "Building size", unit: "SF", better: higher, tol: {rel: 0.1}, check: "ask the broker"}
+  drive_ins:              {label: "Drive-in doors", unit: "doors", better: higher, tol: {abs: 0}, check: "check the aerial obliques"}
+  drive_in_h_ft:          {label: "Drive-in door height", unit: "ft", better: higher, tol: {abs: 2}, check: "check the aerial obliques"}
+  power_amps:             {label: "Power", unit: "A", better: higher, tol: {rel: 0.1}, check: "ask the broker for the service size"}
+  heavy_power:            {label: "Heavy power", unit: "", better: higher, tol: {abs: 0}, check: "ask the broker"}
+  parking:                {label: "Car parking", unit: "spaces", better: higher, tol: {rel: 0.15}, check: "check the aerial"}
+  lot_acres_per_ksf:      {label: "Yard land (acres per 1k SF)", unit: "ac/1k SF", better: higher, tol: {rel: 0.15}, check: "check the parcel"}
+  year_built:             {label: "Year built", unit: "", better: higher, tol: {abs: 5}, check: "ask the broker"}
+  asking_rent:            {label: "Asking rent", unit: "$/SF/yr", better: lower, tol: {rel: 0.05}, check: "ask the listing contact"}
+
+operations:
+  cross_dock:
+    name: Cross-dock
+    keywords: ["cross dock", "cross-dock", "crossdock", "flow through", "flow-through", "transload", "trans-load", "crossdocking"]
+    shift_hours: 16
+    truck: semi_53
+    criteria:
+      - {key: docks_per_10ksf, weight: 5, level: D, min: 1.0, why: "Throughput is set by doors per square foot, not by storage height."}
+      - {key: dock_turn_capacity_est, weight: 4, why: "How many trailers the doors can turn in a two-shift day."}
+      - {key: cross_dock_config, weight: 4, why: "Doors on opposite walls let freight flow straight through."}
+      - {key: truck_court_ft, weight: 4, level: D, min: 120, why: "53 ft trailers need about 120 ft to back in with neighbours docked."}
+      - {key: trailer_staging, weight: 3, why: "Trailers wait in the yard between drops."}
+      - {key: usable_floor, weight: 2, why: "Enough staging floor between the two dock walls."}
+      - {key: asking_rent, weight: 2, why: "Cost per square foot."}
+
+  pallet_storage:
+    name: Pallet storage
+    keywords: ["pallet storage", "storage", "store pallets", "racking", "rack", "warehousing", "distribution center", "distribution", "inventory", "logistics"]
+    shift_hours: 8
+    truck: semi_53
+    criteria:
+      - {key: clear_height_ft, weight: 5, level: D, min: 24, why: "Each extra rack level is more pallet positions on the same floor."}
+      - {key: usable_floor, weight: 5, why: "Storage capacity scales with floor area."}
+      - {key: column_spacing_ft, weight: 4, why: "Wider bays fit more rack runs and aisles with fewer lost positions."}
+      - {key: docks_per_10ksf, weight: 3, why: "Enough doors for receiving and shipping waves."}
+      - {key: truck_court_ft, weight: 3, why: "53 ft trailers need about 120 ft of court."}
+      - {key: asking_rent, weight: 3, why: "Cost per square foot."}
+
+  ecommerce:
+    name: E-commerce fulfillment
+    keywords: ["e-commerce", "ecommerce", "fulfillment", "fulfilment", "online orders", "parcel", "each pick", "d2c", "dtc"]
+    profile: ecommerce_fulfillment
+    shift_hours: 10
+    truck: semi_53
+    criteria:
+      - {key: clear_height_ft, weight: 4, why: "Mezzanines and tall shelving for many small SKUs."}
+      - {key: docks_per_10ksf, weight: 4, level: D, min: 0.8, why: "Outbound parcel waves need many doors."}
+      - {key: parking, weight: 4, why: "Pick-and-pack is labour heavy: staff parking."}
+      - {key: power_amps, weight: 3, why: "Conveyors, sorters and robot charging."}
+      - {key: usable_floor, weight: 3, why: "Floor for pick modules and pack stations."}
+      - {key: asking_rent, weight: 2, why: "Cost per square foot."}
+
+  cold_storage:
+    name: Cold storage
+    keywords: ["cold storage", "refrigerated", "freezer", "frozen", "cold chain", "reefer", "temperature controlled"]
+    profile: cold_storage
+    shift_hours: 8
+    truck: semi_53
+    criteria:
+      - {key: power_amps, weight: 5, level: D, min: 2000, why: "A refrigeration plant needs a large electrical service."}
+      - {key: heavy_power, weight: 4, level: D, value: true, why: "Heavy power is a precondition for the plant."}
+      - {key: clear_height_ft, weight: 4, why: "Tall cubes amortise the insulated box."}
+      - {key: docks_per_10ksf, weight: 3, why: "Doors with seals; enough of them for the turns."}
+      - {key: year_built, weight: 2, why: "Newer slabs and roofs suit insulation and slab heating."}
+      - {key: usable_floor, weight: 2, why: "Box size."}
+
+  last_mile:
+    name: Last-mile delivery
+    keywords: ["last mile", "last-mile", "delivery station", "vans", "van fleet", "final mile", "parcel delivery"]
+    profile: last_mile_station
+    shift_hours: 6
+    truck: last_mile_van
+    criteria:
+      - {key: drive_ins, weight: 5, level: D, min: 2, why: "Vans load at grade through drive-in doors."}
+      - {key: parking, weight: 4, why: "Van and staff parking on site."}
+      - {key: lot_acres_per_ksf, weight: 4, why: "Yard land for van loading lanes."}
+      - {key: trailer_staging, weight: 3, why: "Paved yard for queuing vans and line-haul trailers."}
+      - {key: power_amps, weight: 2, why: "EV van charging."}
+      - {key: asking_rent, weight: 2, why: "Cost per square foot."}
+
+  manufacturing:
+    name: Light manufacturing
+    keywords: ["manufacturing", "manufacture", "assembly", "fabrication", "machine shop", "production", "plant"]
+    profile: light_manufacturing
+    shift_hours: 8
+    truck: box_truck_26
+    criteria:
+      - {key: power_amps, weight: 5, why: "Machines and process loads."}
+      - {key: heavy_power, weight: 4, level: D, value: true, why: "Three-phase heavy power for equipment."}
+      - {key: clear_height_ft, weight: 3, why: "Room for cranes and tall equipment."}
+      - {key: drive_ins, weight: 3, why: "Materials and equipment come in at grade."}
+      - {key: column_spacing_ft, weight: 3, why: "Open bays for production lines."}
+      - {key: usable_floor, weight: 3, why: "Floor for cells and lines."}
+
+  # ---- one per profiles.yaml key (thresholds mirror profiles.yaml `needs`)
+  pallet_3pl:
+    name: 3PL pallet storage
+    keywords: ["3pl", "third party logistics", "third-party logistics"]
+    profile: pallet_3pl
+    shift_hours: 8
+    truck: semi_53
+    criteria:
+      - {key: clear_height_ft, weight: 5, level: D, min: 28, why: "Storage density: rack levels decide pallet positions."}
+      - {key: docks_per_10ksf, weight: 4, level: D, min: 1.0, why: "Inbound and outbound trailers every day."}
+      - {key: truck_court_ft, weight: 4, level: D, min: 120, why: "53 ft trailers need about 120 ft to back in."}
+      - {key: usable_floor, weight: 4, why: "Pallet positions scale with floor."}
+      - {key: column_spacing_ft, weight: 3, why: "Wider bays waste fewer rack positions."}
+      - {key: asking_rent, weight: 3, why: "Cost per square foot (3PL margins are thin)."}
+
+  ecommerce_fulfillment:
+    name: E-commerce fulfillment
+    keywords: []
+    profile: ecommerce_fulfillment
+    shift_hours: 10
+    truck: semi_53
+    criteria:
+      - {key: docks_per_10ksf, weight: 4, level: D, min: 0.8, why: "Outbound parcel waves need many doors."}
+      - {key: clear_height_ft, weight: 4, min: 28, why: "Mezzanines and tall shelving."}
+      - {key: parking, weight: 4, why: "Labour-heavy: staff parking."}
+      - {key: power_amps, weight: 3, min: 1200, why: "Conveyors and robot charging."}
+      - {key: usable_floor, weight: 3, why: "Floor for pick modules."}
+      - {key: asking_rent, weight: 2, why: "Cost per square foot."}
+
+  food_beverage:
+    name: Food & beverage distribution
+    keywords: ["food", "beverage", "grocery", "restaurant supply", "drinks"]
+    profile: food_beverage
+    shift_hours: 10
+    truck: semi_53
+    criteria:
+      - {key: docks_per_10ksf, weight: 5, level: D, min: 1.2, why: "Many early-morning route trucks load at once."}
+      - {key: dock_turn_capacity_est, weight: 4, why: "Door turns per day set route capacity."}
+      - {key: truck_court_ft, weight: 3, min: 120, why: "Inbound 53 ft trailers need about 120 ft."}
+      - {key: clear_height_ft, weight: 3, min: 24, why: "Selective rack for case picking."}
+      - {key: power_amps, weight: 3, min: 800, why: "Coolers and battery charging."}
+      - {key: usable_floor, weight: 2, why: "Pick and staging floor."}
+
+  last_mile_station:
+    name: Last-mile delivery station
+    keywords: []
+    profile: last_mile_station
+    shift_hours: 6
+    truck: last_mile_van
+    criteria:
+      - {key: drive_ins, weight: 5, level: D, min: 2, why: "Vans load at grade through drive-in doors."}
+      - {key: lot_acres_per_ksf, weight: 5, level: D, min: 0.12, why: "Van parking and loading lanes."}
+      - {key: parking, weight: 4, why: "Van and staff parking."}
+      - {key: trailer_staging, weight: 3, why: "Paved yard for queuing."}
+      - {key: power_amps, weight: 2, min: 1600, why: "EV van charging."}
+
+  light_manufacturing:
+    name: Light manufacturing / assembly
+    keywords: []
+    profile: light_manufacturing
+    shift_hours: 8
+    truck: box_truck_26
+    criteria:
+      - {key: heavy_power, weight: 5, level: D, value: true, why: "Machines need heavy power."}
+      - {key: power_amps, weight: 4, why: "Process loads."}
+      - {key: clear_height_ft, weight: 3, min: 18, why: "Room for tall equipment and cranes."}
+      - {key: drive_ins, weight: 3, min: 1, why: "Materials come in at grade."}
+      - {key: usable_floor, weight: 3, why: "Floor for cells and lines."}
+
+  building_materials:
+    name: Building materials & lumber
+    keywords: ["lumber", "building materials", "construction supply", "steel yard"]
+    profile: building_materials
+    shift_hours: 9
+    truck: box_truck_26
+    criteria:
+      - {key: drive_ins, weight: 5, level: D, min: 2, why: "Long loads move through drive-in doors."}
+      - {key: drive_in_h_ft, weight: 4, min: 14, why: "Tall loads on flatbeds need tall doors."}
+      - {key: lot_acres_per_ksf, weight: 5, level: D, min: 0.06, why: "Outdoor storage yard."}
+      - {key: trailer_staging, weight: 3, why: "Paved yard for flatbeds."}
+      - {key: usable_floor, weight: 2, why: "Covered storage."}
+
+  auto_parts:
+    name: Auto parts distribution
+    keywords: ["auto parts", "autoparts", "automotive"]
+    profile: auto_parts
+    shift_hours: 10
+    truck: semi_53
+    criteria:
+      - {key: clear_height_ft, weight: 4, level: D, min: 24, why: "Rack and shelving for many SKUs."}
+      - {key: docks_per_10ksf, weight: 4, level: D, min: 0.6, why: "Daily store replenishment routes."}
+      - {key: usable_floor, weight: 4, why: "SKU count needs floor."}
+      - {key: column_spacing_ft, weight: 3, why: "Fewer lost rack positions."}
+      - {key: parking, weight: 2, why: "Pickers' parking."}
+      - {key: asking_rent, weight: 2, why: "Cost per square foot."}
+
+default: pallet_storage

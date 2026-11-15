@@ -1,0 +1,31 @@
+# secrets
+.env
+.env.*
+!.env.example
+
+# local build artifacts
+build/
+cache/
+records/
+output/
+*.duckdb
+*.duckdb.wal
+
+# python
+__pycache__/
+*.pyc
+.venv/
+
+# os
+.DS_Store
+
+# sponsor data (CoStar kit) - not ours to republish; commercial-property.jsonl is > GitHub's 100 MB limit
+data/
+commercial-properties.csv
+residential-listings.csv
+
+# web
+web/node_modules/
+web/dist/
+# Matterport Bundle SDK (from the hackathon Discord bot; has its own LICENSE.md) - fetch separately
+web/public/bundle/

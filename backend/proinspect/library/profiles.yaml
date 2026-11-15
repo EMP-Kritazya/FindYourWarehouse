@@ -1,0 +1,167 @@
+# Business profiles: how a type of operation uses a warehouse. The Intake Agent starts from one of these and
+# overrides what the user says; the Operations Planner and the simulator read them.
+#
+# Volumes are for ONE shift at the profile's reference size (ref_sqft). The simulator scales volume with the
+# building's usable floor area. Values are typical planning figures (industry rules of thumb), not a company's data.
+#
+#   inbound / outbound     trucks per shift by vehicle id (see equipment.yaml) and what they carry
+#   storage                rack type and typical levels (pallet positions are computed by the layout, not assumed)
+#   pick                   unit picked (pallet | case | each) and lines per hour per picker
+#   velocity               share of picks by SKU class (A fast / B / C slow) -> slotting near docks
+#   fleet                  default equipment mix per 100,000 SF (the planner adjusts it to the building)
+#   needs                  requirements that become default deal-breakers (D) or nice-to-haves (N)
+
+profiles:
+  ecommerce_fulfillment:
+    name: E-commerce fulfillment
+    icon: package
+    description: "Each-picking of many small SKUs into parcels; heavy outbound parcel volume, cutoff-time driven."
+    ref_sqft: 100000
+    shift_hours: 10
+    inbound: {semi_53: 6}
+    outbound: {box_truck_26: 4, semi_53: 3, last_mile_van: 10}
+    units: {inbound_pallets: 150, outbound_parcels: 9000}
+    storage: {type: shelving_and_selective_rack, levels: 4}
+    pick: {unit: each, lines_per_hour: 120, pickers_per_100ksf: 30}
+    velocity: {A: 0.70, B: 0.20, C: 0.10}
+    fleet: {pallet_jack_electric: 4, reach_truck: 3, amr_goods_to_person: 25, conveyor_sorter: 4}
+    needs:
+      clear_height_ft: {min: 28, level: N}
+      docks_per_10ksf: {min: 0.8, level: D}
+      parking_spaces_per_ksf: {min: 1.0, level: N}     # labor-heavy
+      power_amps: {min: 1200, level: N}                 # conveyors + robot charging
+      sprinklers: {value: ESFR, level: N}
+
+  pallet_3pl:
+    name: 3PL pallet storage
+    icon: pallet
+    description: "Third-party logistics: receive, store and ship full pallets for several clients; storage density matters."
+    ref_sqft: 100000
+    shift_hours: 8
+    inbound: {semi_53: 10}
+    outbound: {semi_53: 10}
+    units: {inbound_pallets: 260, outbound_pallets: 260}
+    storage: {type: selective_rack, levels: 5}
+    pick: {unit: pallet, lines_per_hour: 18, pickers_per_100ksf: 6}
+    velocity: {A: 0.50, B: 0.30, C: 0.20}
+    fleet: {counterbalance_electric: 3, reach_truck: 5, pallet_jack_electric: 4}
+    needs:
+      clear_height_ft: {min: 28, level: D}
+      docks_per_10ksf: {min: 1.0, level: D}
+      truck_court_ft: {min: 120, level: D}
+      sprinklers: {value: ESFR, level: N}
+
+  food_beverage:
+    name: Food & beverage distribution
+    icon: crate
+    description: "Case-picking cases of food and drink to grocery and restaurant routes; early-morning outbound waves."
+    ref_sqft: 100000
+    shift_hours: 10
+    inbound: {semi_53: 8}
+    outbound: {box_truck_26: 14, semi_53: 2}
+    units: {inbound_pallets: 210, outbound_cases: 14000}
+    storage: {type: selective_rack, levels: 4}
+    pick: {unit: case, lines_per_hour: 160, pickers_per_100ksf: 14}
+    velocity: {A: 0.65, B: 0.25, C: 0.10}
+    fleet: {pallet_jack_electric: 12, reach_truck: 4, counterbalance_electric: 2}
+    needs:
+      clear_height_ft: {min: 24, level: N}
+      docks_per_10ksf: {min: 1.2, level: D}
+      truck_court_ft: {min: 120, level: N}
+      power_amps: {min: 800, level: N}
+
+  cold_storage:
+    name: Cold storage
+    icon: snowflake
+    description: "Refrigerated or frozen pallets; insulated box, high power, docks with seals; every door opening costs energy."
+    ref_sqft: 80000
+    shift_hours: 8
+    inbound: {semi_53: 7}
+    outbound: {semi_53: 6, box_truck_26: 4}
+    units: {inbound_pallets: 180, outbound_pallets: 200}
+    storage: {type: drive_in_or_pushback, levels: 5}
+    pick: {unit: pallet, lines_per_hour: 15, pickers_per_100ksf: 5}
+    velocity: {A: 0.55, B: 0.30, C: 0.15}
+    fleet: {reach_truck: 4, counterbalance_electric: 2, pallet_jack_electric: 3}
+    needs:
+      clear_height_ft: {min: 32, level: N}
+      docks_per_10ksf: {min: 1.0, level: D}
+      heavy_power: {value: true, level: D}             # refrigeration plant
+      power_amps: {min: 2000, level: D}
+      year_built: {min: 1990, level: N}                # insulation / slab heating
+
+  last_mile_station:
+    name: Last-mile delivery station
+    icon: van
+    description: "Sort parcels and load a fleet of vans each morning; yard and van parking matter more than height."
+    ref_sqft: 60000
+    shift_hours: 6
+    inbound: {semi_53: 5}
+    outbound: {last_mile_van: 60}
+    units: {inbound_parcels: 12000, outbound_parcels: 12000}
+    storage: {type: floor_staging, levels: 1}
+    pick: {unit: each, lines_per_hour: 400, pickers_per_100ksf: 40}
+    velocity: {A: 1.0, B: 0.0, C: 0.0}
+    fleet: {pallet_jack_electric: 6, conveyor_sorter: 6, tugger_train: 2}
+    needs:
+      drive_ins: {min: 2, level: D}
+      lot_acres_per_ksf: {min: 0.12, level: D}         # van parking and loading lanes
+      parking_spaces_per_ksf: {min: 1.5, level: N}
+      power_amps: {min: 1600, level: N}                # EV van charging
+
+  light_manufacturing:
+    name: Light manufacturing / assembly
+    icon: gear
+    description: "Raw materials in, assembly cells, finished goods out; power and crane access matter."
+    ref_sqft: 50000
+    shift_hours: 8
+    inbound: {semi_53: 2, box_truck_26: 3}
+    outbound: {box_truck_26: 4}
+    units: {inbound_pallets: 70, outbound_pallets: 60}
+    storage: {type: selective_rack, levels: 3}
+    pick: {unit: pallet, lines_per_hour: 12, pickers_per_100ksf: 4}
+    velocity: {A: 0.60, B: 0.30, C: 0.10}
+    fleet: {counterbalance_lpg: 3, tugger_train: 2, pallet_jack_electric: 3}
+    needs:
+      clear_height_ft: {min: 18, level: N}
+      heavy_power: {value: true, level: D}
+      power_phases: {min: 3, level: D}
+      drive_ins: {min: 1, level: N}
+      cranes: {value: true, level: N}
+
+  building_materials:
+    name: Building materials & lumber
+    icon: beam
+    description: "Long, heavy loads; outdoor storage yard, drive-in doors and cranes; flatbed trucks."
+    ref_sqft: 40000
+    shift_hours: 9
+    inbound: {semi_53: 3}
+    outbound: {box_truck_26: 8}
+    units: {inbound_pallets: 80, outbound_pallets: 90}
+    storage: {type: cantilever_and_yard, levels: 3}
+    pick: {unit: pallet, lines_per_hour: 10, pickers_per_100ksf: 4}
+    velocity: {A: 0.50, B: 0.35, C: 0.15}
+    fleet: {counterbalance_lpg: 4, yard_truck: 1}
+    needs:
+      drive_ins: {min: 2, level: D}
+      drive_in_h_ft: {min: 14, level: N}
+      cranes: {value: true, level: N}
+      lot_acres_per_ksf: {min: 0.06, level: D}         # outdoor storage yard
+
+  auto_parts:
+    name: Auto parts distribution
+    icon: wrench
+    description: "Mixed pallets, cases and small parts; many SKUs, daily store replenishment routes."
+    ref_sqft: 80000
+    shift_hours: 10
+    inbound: {semi_53: 5}
+    outbound: {box_truck_26: 10, last_mile_van: 6}
+    units: {inbound_pallets: 130, outbound_cases: 7000}
+    storage: {type: selective_rack_and_shelving, levels: 4}
+    pick: {unit: case, lines_per_hour: 110, pickers_per_100ksf: 16}
+    velocity: {A: 0.60, B: 0.25, C: 0.15}
+    fleet: {reach_truck: 4, order_picker: 6, pallet_jack_electric: 5}
+    needs:
+      clear_height_ft: {min: 24, level: D}
+      docks_per_10ksf: {min: 0.6, level: D}
+      sprinklers: {value: ESFR, level: N}

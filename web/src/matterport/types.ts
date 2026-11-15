@@ -1,7 +1,7 @@
 // Matterport scene contract (docs/CONTRACTS.md, GET /api/sim/{run_id}/scene). Showcase world metres, y up.
 // yaw: radians about Showcase +y (three.js rotation.y); a box's w / a vehicle's length l lie along local +x.
 export type VehicleState = 'empty' | 'loaded' | 'pick' | 'drop' | 'idle' | string;
-export type VehicleKey = [t_s: number, x: number, z: number, yaw: number, state: VehicleState];
+export type VehicleKey = [t_s: number, x: number, z: number, yaw: number, state: VehicleState, fork_m?: number];
 
 export interface SimScene {
   run_id?: string;
@@ -11,7 +11,12 @@ export interface SimScene {
   synthetic?: boolean;
   floor_y: number;
   scanned_area?: [number, number][];
-  racks?: { x: number; z: number; w: number; d: number; h: number; yaw?: number }[];
+  racks?: { x: number; z: number; w: number; d: number; h: number; yaw?: number; bays?: number; levels?: number; level_h?: number;
+             deep?: number; type?: string; along?: 'd' | 'w'; ok?: boolean }[];
+  /** interior planner: floor outlines of scanned objects the buyer removed (the scan itself can't be erased) */
+  removed?: { id: string; ring: [number, number][] }[];
+  /** interior planner zones as floor patches (open floor is otherwise invisible) */
+  zones?: { id: string; type: string; ring: [number, number][]; label: string }[];
   lanes?: { x: number; z: number; w: number; d: number; yaw?: number; door?: number; inbound?: boolean }[];
   doors?: { x: number; z: number; yaw?: number; w?: number; h?: number; kind?: string; source?: string }[];
   heat?: { cell: number; cells: [number, number, number][] };

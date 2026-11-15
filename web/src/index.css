@@ -11,7 +11,7 @@
   --color-line-2: #333b4a;
   --color-ink: #e8ecf2;
   --color-ink-2: #a3adbd;
-  --color-ink-3: #6b7587;
+  --color-ink-3: #8a94a6;   /* >= 5:1 on every panel (was #6b7587, 3.3-3.9:1: failed WCAG AA) */
   --color-accent: #4fd1c5;
   --color-accent-2: #2a9d93;
   --color-good: #4ade80;
@@ -34,6 +34,21 @@ body {
   backdrop-filter: blur(14px) saturate(140%);
   border: 1px solid var(--color-line);
   box-shadow: 0 10px 40px -10px rgb(0 0 0 / 0.6);
+}
+
+/* keyboard focus: always visible, in the accent colour (WCAG 2.4.7) */
+:where(button, a, input, select, textarea, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+/* Tailwind v4 preflight resets buttons to the default cursor */
+button:not(:disabled), [role="button"], summary, select { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+
+/* honour reduced motion: no slide-ins, shimmer or pulsing */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; animation-iteration-count: 1 !important; transition-duration: 1ms !important; scroll-behavior: auto !important; }
 }
 
 .scroll-thin { scrollbar-width: thin; scrollbar-color: var(--color-line-2) transparent; }

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Map, useControl, type MapRef } from '@vis.gl/react-maplibre'
 import { MapLibreOverlay, type MapLibreOverlayProps } from '@deck.gl/maplibre'
 import { TerrainLayer } from '@deck.gl/geo-layers'
-import { BitmapLayer, ColumnLayer, LineLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { BitmapLayer, LineLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { loadTwin } from './WarehouseCard'
 import type { PickingInfo } from '@deck.gl/core'
 import type { StyleSpecification } from 'maplibre-gl'
@@ -23,6 +23,9 @@ function DeckOverlay(props: MapLibreOverlayProps) {
 
 type RGBA = [number, number, number, number]
 interface Datum { pin: Pin; result?: Result; color: RGBA; px: number; rank?: number; excluded: boolean }
+
+/** marker radius (px): building size, or rank when results are ranked (px is 4-48) */
+const pinR = (d: Datum) => (d.excluded ? 3.5 : 5 + Math.max(0, d.px - 4) / 44 * 7)
 
 const metresPerPixel = (lat: number, zoom: number) => (78271.517 * Math.cos((lat * Math.PI) / 180)) / 2 ** zoom
 
@@ -149,35 +152,27 @@ export default function MapView() {
       // dark puck under every tower so pins read on bright imagery
       new ScatterplotLayer<Datum>({
         id: 'pin-shadow', data, radiusUnits: 'pixels', getPosition: (d) => [d.pin.lon, d.pin.lat],
-        getRadius: (d) => (d.excluded ? 5 : 10), getFillColor: [6, 9, 14, 150],
+        getRadius: (d) => pinR(d) + 3, getFillColor: [6, 9, 14, 170], billboard: true,
         updateTriggers: { getRadius: [search, rankOf] },
       }),
       new ScatterplotLayer<Datum>({
         id: 'pin-base', data, pickable: true, radiusUnits: 'pixels', lineWidthUnits: 'pixels', stroked: true,
-        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => (d.excluded ? 3.5 : 7),
-        getFillColor: (d) => [d.color[0], d.color[1], d.color[2], Math.round(d.color[3] * 0.55)],
-        getLineColor: (d) => (d.pin.inspectable && !d.excluded ? [240, 244, 250, 235] : [6, 9, 14, 200]),
-        getLineWidth: 1.5, onHover, onClick: (i) => i.object && select(i.object.pin.id),
+        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => pinR(d), billboard: true,
+        getFillColor: (d) => (d.excluded ? [d.color[0], d.color[1], d.color[2], 90] : [d.color[0], d.color[1], d.color[2], 235]),
+        getLineColor: (d) => (d.pin.inspectable && !d.excluded ? [240, 244, 250, 240] : [6, 9, 14, 220]),
+        getLineWidth: (d) => (d.pin.inspectable && !d.excluded ? 2 : 1.5), onHover, onClick: (i) => i.object && select(i.object.pin.id),
         updateTriggers: { getFillColor: [search, rankOf], getLineColor: [search, rankOf], getRadius: [search, rankOf] },
         transitions: { getFillColor: 400, getRadius: 400 },
       }),
-      new ColumnLayer<Datum>({
-        id: 'pin-towers', data: dock.hideTowerId != null ? data.filter((d) => d.pin.id !== dock.hideTowerId) : data, pickable: true, extruded: true, diskResolution: 12, radiusUnits: 'pixels', radius: 5,
-        getPosition: (d) => [d.pin.lon, d.pin.lat], getElevation: (d) => d.px * mpp,
-        getFillColor: (d) => d.color, material: { ambient: 0.55, diffuse: 0.6, shininess: 32, specularColor: [60, 64, 70] },
-        onHover, onClick: (i) => i.object && select(i.object.pin.id),
-        updateTriggers: { getElevation: [zoom, search, rankOf], getFillColor: [search, rankOf] },
-        transitions: { getElevation: 500, getFillColor: 400 },
-      }),
       new ScatterplotLayer<Datum>({
         id: 'pin-halo', data: halo, radiusUnits: 'pixels', lineWidthUnits: 'pixels', stroked: true, filled: true,
-        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => (d.pin.id === selectedId ? 16 : 12),
+        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => pinR(d) + (d.pin.id === selectedId ? 8 : 5), billboard: true,
         getFillColor: [79, 209, 197, 40], getLineColor: (d) => (d.pin.id === selectedId ? [79, 209, 197, 255] : [226, 232, 240, 200]),
         getLineWidth: 2, updateTriggers: { getRadius: [selectedId], getLineColor: [selectedId] },
       }),
       new ScatterplotLayer<Datum>({
         id: 'pin-shortlist', data: starred, radiusUnits: 'pixels', lineWidthUnits: 'pixels', stroked: true, filled: false,
-        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: 11, getLineColor: [251, 191, 36, 235], getLineWidth: 2,
+        getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => pinR(d) + 4, billboard: true, getLineColor: [251, 191, 36, 235], getLineWidth: 2,
       }),
       // docks are drawn through the 3D site surface (x-ray), so walls and roofs never hide them
       ...dock.layers.map((l) => (l ? l.clone({ parameters: { depthCompare: "always", depthWriteEnabled: false } }) : l)),
@@ -191,10 +186,16 @@ export default function MapView() {
         getLineColor: [10, 13, 18, 255], getLineWidth: 2.5,
       }),
       new TextLayer<Datum>({
-        id: 'pin-rank', data: ranked, getPosition: (d) => [d.pin.lon, d.pin.lat, d.px * mpp + 4 * mpp],
+        id: 'pin-name', data: data.filter((d) => d.pin.id === selectedId || d.pin.id === hoveredId), getPosition: (d) => [d.pin.lon, d.pin.lat],
+        getText: (d) => d.pin.address, getSize: 12, sizeUnits: 'pixels', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 600,
+        getColor: [232, 236, 242, 255], background: true, getBackgroundColor: [10, 13, 18, 220], backgroundPadding: [6, 3, 6, 3],
+        getPixelOffset: (d) => [0, pinR(d) + 14], updateTriggers: { data: [selectedId, hoveredId] },
+      }),
+      new TextLayer<Datum>({
+        id: 'pin-rank', data: ranked, getPosition: (d) => [d.pin.lon, d.pin.lat],
         getText: (d) => String(d.rank), getSize: 12, sizeUnits: 'pixels', fontFamily: 'Inter, system-ui, sans-serif',
         fontWeight: 600, getColor: [10, 14, 20, 255], background: true, getBackgroundColor: (d) => d.color,
-        backgroundPadding: [5, 2, 5, 2], getPixelOffset: [0, -8], characterSet: '0123456789',
+        backgroundPadding: [5, 2, 5, 2], getPixelOffset: (d) => [0, -(pinR(d) + 12)], characterSet: '0123456789',
         updateTriggers: { getPosition: [zoom] },
       }),
     ]

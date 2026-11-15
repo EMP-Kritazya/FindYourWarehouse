@@ -20,7 +20,7 @@ def test_most_loading_docks_ranks_tiers_and_investigates_unknowns():
                  say("Ranked by CoStar dock count. Want the cross-dock comparison?")])
     reply, ev = turn(g, "Find me the warehouse with the highest number of loading docks in Houston")
     cmds = uis(ev)
-    assert ("rankAttribute", {"attr": "docks_total", "market": "Houston"}) in cmds
+    assert ("rankAttribute", {"attr": "docks_total", "market": "Houston", "order": "desc"}) in cmds
     assert any(c == "highlight" for c, _ in cmds) and any(c == "flyTo" for c, _ in cmds)
     res = json.loads(g.evidence[-2])
     assert res["attr"] == "docks_total" and res["coverage"]["unknown"] == len(r["unknown"])
@@ -68,6 +68,14 @@ def test_five_trucks_opens_the_maneuver_test_with_counts():
     assert out["trucks_total"] == 5 and out["required_court_ft"] == 130 and out["precheck"]
 
 
+def test_agent_cannot_start_a_yard_test_the_user_did_not_ask_for():
+    g, _ = make([say("", ("yard_maneuver_test", {"id": HERO, "trucks": [{"type": "semi_53", "count": 5}]})),
+                 say("Here it is.")])
+    _, ev = turn(g, "take me to 3200 Sam Houston Pkwy")
+    assert not [c for c, _ in uis(ev) if c == "yardTest"]
+    assert "not run" in json.loads(g.evidence[-1])["error"]
+
+
 def test_parse_trucks_words():
     assert AT.parse_trucks(["5 semis"]) == [{"type": "semi_53", "count": 5}]
     assert AT.parse_trucks(["3 box trucks", "2 vans"]) == [{"type": "box_truck_26", "count": 3},
@@ -79,3 +87,12 @@ def test_step_summary_never_raises():
     assert AT.step_summary("anything", {}, "text")["summary"] == "done"
     assert AT.step_summary("rank_attribute", {}, {"weird": 1})["summary"].startswith("returned")
     assert AT.step_summary("x", {}, {"error": "boom"})["ok"] is False
+
+
+def test_smallest_ranks_ascending_from_the_words():
+    from proinspect import analytics as A
+    r = A.rank_attribute("smallest warehouses", None, "Houston", 5)
+    assert r["attr"] == "rba_sqft" and r["order"] == "asc"
+    v = [x["value"] for x in r["verified"]]
+    assert v == sorted(v)
+    assert A.rank_attribute("biggest", None, "Houston", 5)["order"] == "desc"

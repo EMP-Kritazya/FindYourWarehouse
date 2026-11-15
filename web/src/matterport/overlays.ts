@@ -105,7 +105,8 @@ export class OverlayRenderer {
       strip.position.set((A.x + B.x) / 2 - nx * 0.3, fy + 0.03, (A.z + B.z) / 2 - nz * 0.3);
       strip.rotation.y = face.rotation.y;
       g.add(strip);
-      const txt = `${/^new/.test(d.id) ? `D${i + 1}` : d.id.toUpperCase()} ${KIND_LABEL[d.kind] ?? d.kind} · ${(d.width_m / FT).toFixed(1)} ft${d.height_m == null ? ' · h ?' : ''}${d.source === 'dev_fixture' ? ' (dev)' : ''}`;
+      const lb = (d as { label?: string }).label
+      const txt = `${lb ?? (/^new/.test(d.id) ? `D${i + 1}` : d.id.toUpperCase())}${(d as { approx?: boolean }).approx ? ' ≈±2 m' : ''} ${KIND_LABEL[d.kind] ?? d.kind} · ${(d.width_m / FT).toFixed(1)} ft${d.height_m == null ? ' · h ?' : ''}${d.source === 'dev_fixture' ? ' (dev)' : ''}`;
       const lab = this.label(txt, color, 0.75);
       lab.position.set((A.x + B.x) / 2, fy + H + 0.6 + (i % 2) * 0.5, (A.z + B.z) / 2);
       g.add(lab);

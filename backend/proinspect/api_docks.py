@@ -85,3 +85,18 @@ def get_proof_image(pid: int, name: str, door: str = Query(...)):
     except Exception as e:                                         # noqa: BLE001  (Vexcel down / offline)
         raise HTTPException(502, f"proof image unavailable: {type(e).__name__}: {str(e)[:160]}") from e
     return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
+@router.post("/api/warehouses/{pid}/docks/align")
+def align_docks(pid: int, body: dict = Body(...)):
+    """One click on a real dock door in the scan: {model_id, x, z} (Showcase metres) -> slide the aerial doors along
+    that wall onto it (registration.shift, confirmed by a person)."""
+    from proinspect import doors as door_store
+    try:
+        x, z, mid = float(body["x"]), float(body["z"]), str(body["model_id"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(422, "body must be {model_id, x, z}")
+    out = door_store.align_to_click(pid, mid, x, z)
+    if not out.get("ok"):
+        raise HTTPException(422, out.get("why") or "could not align")
+    return out

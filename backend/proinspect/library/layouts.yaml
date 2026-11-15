@@ -1,0 +1,51 @@
+# Interior layout recipes: what a type of operation puts on the floor, and why. Zones are depth bands measured from
+# the dock wall (0 = at the dock wall, 1 = the far wall). The planner fills each storage zone with the matching rack
+# type; "open" zones stay clear for production, staging or packing. Machines are equipment.yaml keys.
+operations:
+  pallet_3pl:
+    machine: reach_truck
+    why: "3PL pallet storage: selective rack so every client's pallet is reachable without moving others; reach trucks for 9 ft aisles and 6 levels."
+    zones:
+      - {type: selective, from: 0.0, to: 1.0, why: "pallet storage across the whole floor"}
+  auto_parts:
+    machine: reach_truck
+    why: "Auto parts: pallet reserve in selective rack, fast movers picked near the docks."
+    zones:
+      - {type: shelving, from: 0.0, to: 0.2, why: "hand-pick shelving for small fast-moving parts near the docks"}
+      - {type: selective, from: 0.2, to: 1.0, why: "pallet reserve"}
+  building_materials:
+    machine: counterbalance_electric
+    why: "Building materials & lumber: long goods (lumber, pipe, sheet) on cantilever racks, palletised goods (bags, boxes) on selective racks, and open floor near the docks for bulky items and order staging; counterbalance forklifts handle the heavy loads."
+    zones:
+      - {type: open, from: 0.0, to: 0.25, why: "open floor for bulky items and order staging"}
+      - {type: cantilever, from: 0.25, to: 0.65, why: "cantilever racks for lumber, pipe and sheet goods"}
+      - {type: selective, from: 0.65, to: 1.0, why: "palletised stock (bagged cement, boxed fixtures)"}
+  cold_storage:
+    machine: reach_truck
+    why: "Cold storage: every cubic foot is expensive to cool, so dense double-deep rack (twice the pallets per aisle)."
+    zones:
+      - {type: dense, from: 0.0, to: 1.0, why: "double-deep pallet rack for density"}
+  food_beverage:
+    machine: reach_truck
+    why: "Food & beverage distribution: dense storage of fewer, high-volume SKUs, and a case-pick area near the docks."
+    zones:
+      - {type: shelving, from: 0.0, to: 0.15, why: "case and each picking near the docks"}
+      - {type: dense, from: 0.15, to: 1.0, why: "double-deep pallet storage for high-volume SKUs"}
+  ecommerce_fulfillment:
+    machine: reach_truck
+    why: "E-commerce: thousands of small SKUs picked by hand, so a large shelving pick area near the docks, with pallet reserve behind it."
+    zones:
+      - {type: shelving, from: 0.0, to: 0.35, why: "hand-pick shelving (each picking) close to packing and the docks"}
+      - {type: selective, from: 0.35, to: 1.0, why: "pallet reserve that replenishes the pick area"}
+  light_manufacturing:
+    machine: counterbalance_electric
+    why: "Light manufacturing: most of the floor is open production space; raw materials and finished goods in racks along the back."
+    zones:
+      - {type: open, from: 0.0, to: 0.65, why: "open production / assembly floor"}
+      - {type: selective, from: 0.65, to: 1.0, why: "raw material and finished-goods racking"}
+  last_mile_station:
+    machine: counterbalance_electric
+    why: "Last-mile delivery station: parcels are sorted and staged on the floor for vans; little long-term storage."
+    zones:
+      - {type: open, from: 0.0, to: 0.65, why: "parcel sort and van staging floor"}
+      - {type: selective, from: 0.65, to: 1.0, why: "a little overflow pallet storage"}

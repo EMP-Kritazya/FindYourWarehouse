@@ -36,9 +36,16 @@ from proinspect.library import equipment, profiles
 
 MODEL = "claude-opus-5-5"
 EFFORT = os.environ.get("PROINSPECT_GUIDE_EFFORT", "low")
+EVENT_GAP_S = 8.0                # at most one unprompted comment per this many seconds
 UI_CMDS = ("search", "flyTo", "openCard", "highlight", "compare", "showInside", "yardTest", "equipmentTest",
-           "showPlace", "rankBy", "showAerial", "shortlist", "rankAttribute", "showDocks")
-ONE_ID = ("flyTo", "openCard", "showInside", "showAerial", "yardTest", "equipmentTest", "showDocks")
+           "showPlace", "rankBy", "showAerial", "shortlist", "rankAttribute", "showDocks", "storageTest",
+           "closeCompare", "results")
+ONE_ID = ("flyTo", "openCard", "showInside", "showAerial", "yardTest", "equipmentTest", "showDocks", "storageTest")
+# a test runs only when the user's own words in THIS turn ask for one (never from an event or the agent's initiative)
+ASK_YARD = re.compile(r"\b(test|simulate|run it|go ahead|yes|yep|sure|do it|maneuver|back(ing)?[- ]in|turn(ing)? around|"
+                      r"\d+\s*(trucks?|semis?|trailers?|vans?|box trucks?)|(trucks?|semis?|trailers?|vans?) (fit|get in|use))\b", re.I)
+ASK_INSIDE = re.compile(r"\b(interior|inside|racks?|racking|pallets?|storage|forklifts?|reach trucks?|planner|layout|"
+                        r"capacity|fit|test|run it|go ahead|yes|yep|sure|do it)\b", re.I)
 NO = re.compile(r"^\s*(no|nope|nah|don'?t|do not|cancel|stop|wait|hold on|not yet|change)\b", re.I)
 LEAD_INS = {"search_warehouses": "Pulling those up.", "rank_by": "Checking the aerials.",
             "closest_to": "Scanning the neighborhoods.", "building_brief": "Let me look.",
@@ -46,7 +53,7 @@ LEAD_INS = {"search_warehouses": "Pulling those up.", "rank_by": "Checking the a
             "prepare_test": "Setting that up.", "listing_contact": "Checking the listing.",
             "rank_attribute": "Ranking the catalog.", "dock_evidence": "Checking the dock evidence.",
             "compare_warehouses": "Comparing them.", "find_comparables": "Finding comparables.",
-            "yard_maneuver_test": "Setting up the yard test."}
+            "yard_maneuver_test": "Setting up the yard test.", "storage_capacity": "Laying out racks on the scan."}
 
 RULES = """Truth rules (non-negotiable):
 - Agents decide, tools compute. Never say a number, count, fact or ranking that a tool did not return in this \
@@ -62,12 +69,28 @@ decide "will this warehouse work for my operation?" across about 110 warehouses 
 (find -> shortlist -> inspect -> test -> decide). You do ANALYSIS with deterministic tools; the tools compute, \
 you choose the right tool, decide what to investigate, and explain what the tool output means.
 
-Answer format: at most 4 short sentences (about 80 words), plain prose, one paragraph: the answer first, then \
-the metric/operation you used with its coverage (e.g. "ranked by CoStar dock count; 64 verified, 26 estimated \
-from aerials, 5 unknown"), then the one unknown or caveat that matters, then optionally one next-step question. \
-The screen shows the detail (tables, the steps you took, evidence chips), so don't recite it. No markdown, lists \
+Answer format: SUBTLE AND CONCRETE. 1-2 short sentences, at most about 35 words: the answer itself with its key \
+number(s) and source in a few words (e.g. "15550 Milner Rd: 194 docks (CoStar)."). No preamble ("One moment", \
+"Great question"), no restating the question, no list of what you checked, no closing question unless you truly \
+need an answer to continue. Add a caveat only if it changes the decision, in at most 6 words ("rent not listed"). \
+Explain HOW or WHY (method, coverage, assumptions) only when the user asks ("why", "how", "explain", "more \
+detail"); then up to 4 sentences. The screen shows the detail (tables, steps, evidence chips): never recite it. No markdown, lists \
 or headings. Never write your reasoning, plans or tool choices as text: before a tool call write nothing or a \
 2-5 word lead-in ending with a period ("Checking the docks."). Replies may be spoken.
+
+Guided flow (the app opens with you asking "What are we looking for today?"):
+- When the user states a need (business, size, trucks, market, must-haves), in ONE step call update_buyer_profile \
+with only what they said AND search_warehouses with a query built from it (top=10). Reply with how many match \
+and the #1 by address. Ask at most ONE short question, and only when a missing fact would change the ranking \
+(size, market or truck type); otherwise ask nothing.
+- "Take me to / show me / open <building>" -> ui openCard for it (it also moves the map). Never start a test \
+unless the user asks for one in that message; offer it with suggest instead.
+- Ordinal words ("first", "second", "the top two", "number 3", "the last one") refer to the bottom strip on \
+screen in its order (see the session note). "Compare the first and second" -> compare_warehouses([#1 id, #2 id]) \
+using the buyer's profile; it opens a side-by-side view over the map. Then say the recommended building and the \
+single biggest difference in one sentence. "Close the comparison" / "back to the map" -> ui closeCompare.
+- Curate to the buyer: rank and compare on what they care about, but only claim what the data shows; name an \
+unknown that matters instead of guessing.
 
 How to analyse:
 - Map vague asks to a DEFINED metric and say which: "most loading docks" -> rank_attribute("docks_total"); \
@@ -88,6 +111,9 @@ Compare 2-4 named buildings -> compare_warehouses directly. Recommend ONLY what 
 (semi_53 unless they say box trucks or vans). It opens the maneuver test on screen; report the pre-check facts \
 (doors vs trucks, court depth vs need) and say the animation will show waits and conflicts. A planner failure \
 is "not found by our planner", never "impossible".
+- "How many pallets will it hold?" / racks / storage / "cost per pallet position" / "which forklift" -> \
+storage_capacity(id). Quote its positions (scanned area = measured layout; whole building = estimate), levels and \
+why, and the truck trade-off; say $/position only when it returns one.
 - Plain search ("warehouses in Houston over 50k") -> search_warehouses right away. Note buyer facts with \
 update_buyer_profile when they mention business, size, trucks, equipment, market or must-haves.
 - "Closest to <place type>" -> closest_to(place); hits are likely/possible.
@@ -96,8 +122,10 @@ vexcel_analyst; multi-building CoStar digging -> costar_analyst. Use subagents o
 - Drive the screens with `ui` when a tool didn't already (rank_attribute, compare_warehouses, rank_by, \
 search_warehouses and yard_maneuver_test move the screen themselves). showDocks {id} opens the dock editor. \
 Refer to buildings by street address, never by id.
-- Equipment test and the old Yard test: prepare_test, read the plan back, and run_test only after the user's yes \
-in their NEXT message (or open the form with ui equipmentTest).
+- Inside the building there is ONE test: the interior planner. "Will my forklift fit / work inside?", "how many \
+pallets?", "how many forklifts?" -> storage_capacity(id) (it opens the planner, where the user picks their \
+operation; it reports forklift reach %, minutes per pallet and machines needed). Never offer a separate Equipment \
+test. The old Yard test: prepare_test, read the plan back, run_test only after the user's yes in their NEXT message.
 - Selling help: listing_contact; request_tour only logs the intent (nothing is sent; say so).
 - Messages starting with [EVENT ...] are what the user just did on screen. Comment in 1-2 sentences from the facts \
 given (one insight that matters for this buyer, or one unknown worth checking), then a next-step question.
@@ -222,17 +250,22 @@ class Guide:
             self.context["selected_id"] = int(args["id"])
         await self.emit({"type": "ui", "cmd": cmd, "args": args})
 
-    def set_context(self, selected_id=None, chips=None):
+    def set_context(self, selected_id=None, chips=None, visible=None, market=None):
+        if market in ("Houston", "Los Angeles"):           # the market tab on screen: the default for rankings
+            self.context["market"] = market
         if selected_id is not None:
             self.context["selected_id"] = selected_id
         if chips is not None:
             self.context["chips"] = chips
+        if visible is not None:                         # the bottom strip, in on-screen order (#1 = first)
+            self.context["visible"] = [int(i) for i in visible if isinstance(i, (int, float, str)) and str(i).isdigit()][:10]
 
     def check_numbers(self, reply: str) -> list[str]:
         # Addresses on screen are not claims (e.g. "3200 Sam Houston Pky"), and small whole numbers 0-10 are counts the
         # agent makes over tool output (e.g. "3 dock positions"); everything else must appear in a tool result.
         ctx = [self._addr(i) for i in {self.context.get("selected_id"), *self.shortlist,
-                                       *((self.last_search or {}).get("ids") or [])[:10]} if i]
+                                       *((self.last_search or {}).get("ids") or [])[:10],
+                                       *(self.context.get("visible") or [])} if i]
         bad = strict_unsupported(reply, "\n".join([*self.evidence, *ctx]))
         return [n for n in bad if not re.fullmatch(r"(10|[0-9])", n.strip())]
 
@@ -248,7 +281,13 @@ class Guide:
         sid = self.context.get("selected_id")
         if sid:
             parts.append(f"on screen: {self._addr(sid)} [{sid}]")
-        if self.last_search:
+        if self.context.get("market"):
+            parts.append(f"market tab on screen: {self.context['market']} (rank and search there unless the user names another)")
+        vis = self.context.get("visible") or []
+        if vis:
+            parts.append("bottom strip on screen, in order (\"first\" = #1): " + ", ".join(
+                f"#{n} {self._addr(i)} [{i}]" for n, i in enumerate(vis, 1)))
+        if self.last_search and not vis:
             parts.append("last results (best first): " + ", ".join(
                 f"{self._addr(i)} [{i}]" for i in self.last_search["ids"][:5]))
         if self.proposal:
@@ -301,7 +340,7 @@ class Guide:
             m, alts = VX.interpret(metric)
             if m.startswith("distance_to:"):
                 return await closest_to(m.split(":", 1)[1], market)
-            mk = _market(market)
+            mk = _market(market) or g.profile.get("market") or g.context.get("market")
             r = await VX.rank(m, mk, max(1, min(int(top or 5), 10)))
             defs = (await VX.metrics())["metrics"]
             used = r.get("metric", m)
@@ -328,7 +367,7 @@ class Guide:
             limit to (e.g. the last results when the user says 'which of these'); default: the whole catalog in
             `market`. Shows the place and the warehouse on the map."""
             ids = [int(i) for i in among or [] if G.wh(i)] or None
-            r = await VX.closest_to(place, ids, _market(market))
+            r = await VX.closest_to(place, ids, _market(market) or g.profile.get("market") or g.context.get("market"))
             rows = [{k: x.get(k) for k in ("id", "address", "distance_m", "likelihood", "score", "label")}
                     for x in (r.get("rows") or [])[:5]]
             out = {"place": r.get("place") or place, "closest": rows, "source": r.get("source"),
@@ -343,6 +382,10 @@ class Guide:
                                              **({"thumb_url": best["thumb_url"]} if best.get("thumb_url") else {})})
                 await g.ui("flyTo", {"id": best["id"]})
                 await g.ui("highlight", {"ids": [x["id"] for x in rows]})
+                await g.ui("results", {"title": f"Closest to {out['place']}", "ids": [x["id"] for x in rows],
+                                       "values": {str(x["id"]): f"{x.get('likelihood') or 'possible'} · "
+                                                  f"{round((x.get('distance_m') or 0) / 1609, 1)} mi"
+                                                  for x in rows if x.get("distance_m") is not None}})
                 g.stage = "results"
                 g.last_search = {"query": f"closest to {place}", "chips": [], "ids": [x["id"] for x in rows],
                                  "raw": {"results": [], "excluded": [], "counts": {"shown": len(rows)}}}
@@ -401,6 +444,7 @@ class Guide:
             p["nice_to_haves"] += [m for m in nice_to_haves or [] if m not in p["nice_to_haves"]]
             if note:
                 p["notes"].append(note)
+            await g.ui("profile", {"profile": {k: v for k, v in p.items() if v not in (None, [], "")}})
             return {"profile": p, "not_in_library": unknown or None,
                     "library": {"trucks": list(G.TRUCKS)}}
 
@@ -525,6 +569,9 @@ class Guide:
             a = dict(options or {})
             if cmd not in UI_CMDS:
                 return {"error": f"unknown cmd {cmd}", "cmds": list(UI_CMDS)}
+            if cmd in ("yardTest",) and not g._asked(ASK_YARD) or \
+                    cmd in ("storageTest", "equipmentTest") and not g._asked(ASK_INSIDE):
+                return {"error": "not opened: the user did not ask for a test in this message; offer it with suggest"}
             if cmd in ONE_ID:
                 w = G.wh(id if id is not None else a.get("id"))
                 if not w:
@@ -640,7 +687,7 @@ class Guide:
             lot_acres | year_built | asking_rent | drive_in_h_ft, or the buyer's words ("most loading docks").
             order desc|asc (default per attribute; rent ascending). `among` limits to ids (e.g. the last results).
             Returns tops per tier, coverage counts and the largest unknown buildings. Moves the map."""
-            mk = _market(market) or g.profile.get("market")
+            mk = _market(market) or g.profile.get("market") or g.context.get("market")
             ids = [int(i) for i in among or [] if G.wh(i)] or None
             out = await asyncio.to_thread(AT.rank_attribute, attr, mk, order, top, ids)
             ranked = [x["id"] for x in out["verified_top"]] + [x["id"] for x in out["estimated_top"]]
@@ -648,8 +695,11 @@ class Guide:
                 g.stage = "results"
                 g.last_search = {"query": attr, "chips": [], "ids": ranked,
                                  "raw": {"results": [], "excluded": [], "counts": {"shown": len(ranked)}}}
-                await g.ui("rankAttribute", {"attr": out["attr"], "market": out["market"],
-                                             **({"order": out["order"]} if order else {})})
+                if ids:                                     # ranked within a set: show exactly that list
+                    await g.ui("results", {"title": f"{out.get('label', out['attr'])} ({'lowest' if out['order'] == 'asc' else 'highest'} first)",
+                                           "ids": ranked[:10]})
+                else:
+                    await g.ui("rankAttribute", {"attr": out["attr"], "market": out["market"], "order": out["order"]})
                 await g.ui("highlight", {"ids": ranked[:10]})
                 await g.ui("flyTo", {"id": ranked[0]})
             return out
@@ -671,6 +721,11 @@ class Guide:
             if len(good) < 2:
                 return {"error": "compare needs 2-4 valid warehouse ids"}
             prof = profile or (None if ops_text else g.profile.get("business"))
+            if not prof and not ops_text:               # curate to what the buyer told us, if anything
+                bits = [g.profile.get(k) for k in ("business",) if g.profile.get(k)] + \
+                       list(g.profile.get("must_haves") or []) + list(g.profile.get("nice_to_haves") or []) + \
+                       [t.replace("_", " ") for t in g.profile.get("trucks") or []]
+                ops_text = ", ".join(str(b) for b in bits) or None
             out, full = await asyncio.to_thread(AT.compare, good[:4], prof, ops_text)
             await g.ui("compare", {"ids": good[:4], "profile": full["profile"]})
             g.stage = "shortlist"
@@ -683,13 +738,20 @@ class Guide:
             if not w:
                 return {"error": f"warehouse {id} is not in the catalog"}
             prof = profile or (None if ops_text else g.profile.get("business"))
-            return await asyncio.to_thread(AT.comparables, w["id"], prof, ops_text)
+            out = await asyncio.to_thread(AT.comparables, w["id"], prof, ops_text)
+            cids = [int(i) for i in (out.get("ids") or [x.get("id") for x in out.get("comparables") or []]) if i]
+            if cids:
+                await g.ui("results", {"title": f"Comparable to {w.get('address')}", "ids": [w["id"], *cids]})
+            return out
 
         async def yard_maneuver_test(id: int, trucks: list[dict]):
             """'Can N trucks use this yard at once?': opens the yard maneuver test on screen for one warehouse with
             trucks [{type: semi_53|box_truck_26|last_mile_van, count}] and returns deterministic pre-checks (dock
             doors vs trucks, truck court depth vs the depth the largest truck needs). The animated result comes
             back later as a testResult event."""
+            if not g._asked(ASK_YARD):
+                return {"error": "not run: the user did not ask for a yard test in this message. Do not run tests on "
+                                 "your own; offer it with suggest (e.g. 'Yard test: 5 semis') and wait."}
             w = G.wh(id) or G.find_by_address(str(id))
             if not w:
                 return {"error": f"warehouse {id} is not in the catalog"}
@@ -703,14 +765,37 @@ class Guide:
             await g.ui("yardTest", {"id": w["id"], "trucks": ts, "mode": "maneuver"})
             return out
 
+        async def storage_capacity(id: int, equipment: str = "reach_truck"):
+            """Pallet storage on the REAL scanned floor: selective racks laid out around the scan's columns, levels
+            from the scan's lowest obstruction and CoStar's sprinkler type, positions (scanned + whole-building
+            estimate), SF and $ per position, positions lost to columns, and the same floor with counterbalance /
+            reach / VNA trucks. Opens the storage planner on screen. Needs a Matterport warehouse-floor scan."""
+            from proinspect import racks
+            w = G.wh(id) or G.find_by_address(str(id))
+            if not w:
+                return {"error": f"warehouse {id} is not in the catalog"}
+            try:
+                p = await asyncio.to_thread(racks.plan, w["id"], equipment)
+                t = await asyncio.to_thread(racks.compare_trucks, w["id"])
+            except FileNotFoundError as e:
+                return {"error": str(e)}
+            g.stage = "test"
+            g.context["selected_id"] = w["id"]
+            if g._asked(ASK_INSIDE):                     # the numbers are fine to quote; the planner opens only on ask
+                await g.ui("storageTest", {"id": w["id"]})
+            keep = ("positions", "levels", "levels_basis", "aisle_ft", "scanned_sqft", "sqft_per_position",
+                    "building_estimate", "cost_per_position_yr", "positions_lost_to_columns", "sprinkler", "clear")
+            return {"address": w.get("address"), "equipment": p["equipment_name"], **{k: p[k] for k in keep},
+                    "trucks": t["trucks"]}
+
         T = {f.__name__: self._tool(f) for f in (
             search_warehouses, rank_by, closest_to, building_brief, find_address, update_buyer_profile, shortlist,
             listing_contact, request_tour, prepare_test, run_test, last_test_result, ui, suggest, get_facts,
             explain_rank, compare_buildings, vexcel_profile, vexcel_rank, vexcel_search, vexcel_detect,
             vexcel_imagery, vexcel_metrics, interior_facts, rank_attribute, dock_evidence, compare_warehouses,
-            find_comparables, yard_maneuver_test)}
+            find_comparables, yard_maneuver_test, storage_capacity)}
         orch = [T[n] for n in ("search_warehouses", "rank_attribute", "dock_evidence", "compare_warehouses",
-                               "find_comparables", "yard_maneuver_test", "rank_by", "closest_to", "building_brief",
+                               "find_comparables", "yard_maneuver_test", "storage_capacity", "rank_by", "closest_to", "building_brief",
                                "find_address", "update_buyer_profile", "shortlist", "listing_contact", "request_tour",
                                "prepare_test", "run_test", "ui", "suggest")]
         subs = {
@@ -761,7 +846,7 @@ class Guide:
                 s.append({"label": "Yard test", "say": f"Can my {equipment()[trucks[0]]['name']} back into the docks "
                                                         f"at {addr}?"})
             elif eq:
-                s.append({"label": "Equipment test", "say": f"Will my {equipment()[eq[0]]['name']} fit inside {addr}?"})
+                s.append({"label": "Interior planner", "say": f"Will my {equipment()[eq[0]]['name']} work inside {addr}?"})
             else:
                 s.append({"label": "Show the aerial", "say": f"Show me the aerial of {addr}"})
             s.append({"label": "Compare for my operation",
@@ -818,7 +903,7 @@ class Guide:
                             segs[-1].append(b["text"])
                         await emit({"type": "assistant_delta", "text": b["text"]})
                     elif t == "tool_use":
-                        if not "".join(said).strip():         # model went straight to a tool: speak a lead-in
+                        if not "".join(said).strip() and getattr(self, "speaking", True):   # spoken turns only: a lead-in fills the silence
                             lead = LEAD_INS.get(b.get("name"), "One moment.")
                             said.append(lead + " ")
                             await emit({"type": "assistant_delta", "text": lead + " "})
@@ -830,6 +915,10 @@ class Guide:
             return reply
         finally:
             self._emit = None
+
+    def _asked(self, rx: re.Pattern) -> bool:
+        """True only inside a user turn whose own words ask for this kind of test."""
+        return bool(getattr(self, "user_turn", False) and rx.search(getattr(self, "last_user_text", "") or ""))
 
     async def turn(self, text: str, emit: Callable[[dict], Awaitable[None]]) -> str:
         """One spoken/typed user turn. Cancel-safe (barge-in): the checkpointer drops dangling tool calls."""
@@ -893,9 +982,18 @@ class Guide:
     async def event(self, name: str, data: dict, emit: Callable[[dict], Awaitable[None]]) -> Optional[str]:
         """A UI event (the user clicked something). Comments at most once per event; None when skipped."""
         data = data if isinstance(data, dict) else {}
+        # Speak up unprompted only when it is worth it: a test result, or the FIRST open of each building
+        # (events_seen makes repeat opens silent). Search results are already on screen. At most one
+        # unprompted comment every EVENT_GAP_S.
+        if name not in ("testResult", "openCard"):
+            return None
+        now = time.monotonic()
+        if now - getattr(self, "last_event_at", -1e9) < EVENT_GAP_S:
+            return None
         key = self._event_key(name, data)
         if key in self.events_seen:
             return None
+        self.last_event_at = now
         self.events_seen.add(key)
         pid = data.get("id") or data.get("property_id")
         if pid is not None and G.wh(pid):
@@ -913,14 +1011,13 @@ class Guide:
         self.evidence.append(txt)
         self.turn_no += 1
         self.user_turn = False
-        hint = {"openCard": "Point out the 2-3 attributes that matter most for this buyer and one mismatch or "
-                            "unknown from fit_for_buyer.",
+        hint = {"openCard": "Name the single attribute that matters most for this buyer, or the one mismatch.",
                 "searchResults": "Say the top 3 and why in one breath, plus what excluded the rest if notable.",
                 "openScan": "Say what to look at inside for this buyer.",
                 "openAerial": "Say what to look at from above for this buyer (one Vexcel insight with its date).",
-                "testResult": "Say the verdict and the one thing that limits it."}.get(name, "Comment briefly.")
+                "testResult": "Say the verdict and its one limit."}.get(name, "Comment briefly.")
         msg = (f"{self._session_note()}\n[EVENT {name}: the user did this on screen; facts from tools: {txt}]\n"
-               f"{hint} 1-2 short sentences, then a next-step question. No tools unless essential.")
+               f"{hint} ONE short sentence (at most about 20 words), concrete, no question. No tools unless essential.")
         return await self._run(msg, emit)
 
 

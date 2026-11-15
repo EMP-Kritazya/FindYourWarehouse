@@ -22,7 +22,7 @@ export interface MatterportStageProps {
   /** optional: pass an already-loaded scene object instead of a URL */
   scene?: SimScene | null;
   /** "view" = scan + sim replay (default); "markDoors" = click two door edges to mark doors; "fit" = equipment test */
-  mode?: 'view' | 'markDoors' | 'fit';
+  mode?: 'view' | 'markDoors' | 'fit' | 'align';
   /** property id (door store + fit endpoints); falls back to scene.property_id */
   propertyId?: number;
   /** equipment test result to draw in mode="fit" */
@@ -211,6 +211,31 @@ export default function MatterportStage(props: MatterportStageProps) {
   }, [picking, ready, mode]);
   useEffect(() => { if (mode !== 'fit') ctlRef.current?.setTarget(null); }, [mode, ready]);
 
+  // ---------------- align: one click on a REAL dock door slides the aerial doors along the wall onto it
+  const [alignMsg, setAlignMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  useEffect(() => {
+    const c = ctlRef.current;
+    if (!c || !ready || mode !== 'align' || pid == null) return;
+    c.onClick = (h) => {
+      const fy = c.floorY();
+      if (h.normal && h.normal.y > 0.6 && Math.abs(h.position.y - fy) < 0.35) {
+        setAlignMsg({ ok: false, text: 'That is the floor: click on the door itself, on the wall.' });
+        return;
+      }
+      setAlignMsg({ ok: true, text: 'Aligning…' });
+      fetch(`/api/warehouses/${pid}/docks/align`, { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model_id: modelId, x: h.position.x, z: h.position.z }) })
+        .then(async (r) => { const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error(j.detail ?? `HTTP ${r.status}`); return j; })
+        .then((j) => {
+          setAlignMsg({ ok: true, text: `Aligned on ${j.door}: every aerial door on this wall moved ${Math.abs(j.moved_m).toFixed(1)} m along the wall. Click another door to refine.` });
+          return fetch(`/api/warehouses/${pid}/doors?model_id=${encodeURIComponent(modelId)}`).then((r) => (r.ok ? r.json() : null));
+        })
+        .then((st) => { if (st) applyStore(st); })
+        .catch((e) => setAlignMsg({ ok: false, text: String(e.message ?? e) }));
+    };
+    return () => { if (c) c.onClick = undefined; };
+  }, [mode, ready, pid, modelId]);
+
   const ctl = ctlRef.current;
   const duration = ctl?.duration || scene?.duration_s || 0;
   const vehicles = scene?.vehicles ?? [];
@@ -248,6 +273,11 @@ export default function MatterportStage(props: MatterportStageProps) {
           source={props.markSource} onSaved={applyStore} />
       )}
       {ready && mode === 'fit' && picking && <div style={S.hint}>Click a spot on the floor to set the target</div>}
+      {ready && mode === 'align' && (
+        <div style={{ ...S.hint, maxWidth: 560, textAlign: 'center', lineHeight: 1.4 }}>
+          {alignMsg ? alignMsg.text : 'Walk to the dock wall, then click the middle of any real dock door. The dashed aerial doors (≈ ±2 m) slide along the wall onto it.'}
+        </div>
+      )}
       {ready && mode === 'fit' && fit && (
         <FitSummary result={fit} heatOn={heatOn} onHeat={setHeatOn} playing={fitPlaying} onPlay={setFitPlaying}
           t={fitT} onReplay={() => { ctl?.seekFit(0); setFitPlaying(true); }}
@@ -259,11 +289,11 @@ export default function MatterportStage(props: MatterportStageProps) {
             {camBtn('Overview', () => { setFollow(''); return ctl?.overview(); })}
             {camBtn('Floor plan', () => { setFollow(''); return ctl?.floorplan(); })}
             {camBtn('Walk', () => { setFollow(''); return ctl?.inside(); })}
-            <select style={S.select} value={follow} disabled={!vehicles.length}
+            {!!vehicles.length && <select style={S.select} value={follow}
               onChange={(e) => { const id = e.target.value; setFollow(id); if (id) ctl?.startFollow(id); else ctl?.stopFollow(); }}>
               <option value="">Follow vehicle…</option>
               {vehicles.map((v) => <option key={String(v.id)} value={String(v.id)}>{vehicleLabel(v.id, v.kind)}</option>)}
-            </select>
+            </select>}
           </div>
 
           <div style={S.legend}>
@@ -277,7 +307,8 @@ export default function MatterportStage(props: MatterportStageProps) {
             {scene.synthetic && <span style={{ ...S.legendItem, color: '#ffc23a' }}>SYNTHETIC</span>}
           </div>
 
-          <div style={S.bar}>
+          {/* a static plan (e.g. the storage planner's racks) has nothing to replay */}
+          {(vehicles.length > 0 || duration > 0) && <div style={S.bar}>
             <button style={S.play} onClick={() => setPlaying((p) => !p)} aria-label={playing ? 'Pause' : 'Play'}>
               {playing ? '❚❚' : '▶'}
             </button>
@@ -288,7 +319,7 @@ export default function MatterportStage(props: MatterportStageProps) {
               {SPEEDS.map((s) => <option key={s} value={s}>{s}×</option>)}
             </select>
             <label style={S.chk}><input type="checkbox" checked={labels} onChange={(e) => setLabels(e.target.checked)} /> labels</label>
-          </div>
+          </div>}
         </>
       )}
     </div>

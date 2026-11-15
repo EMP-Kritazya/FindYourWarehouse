@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import PropertyHud from './PropertyHud'
+import { YardVerdictRow } from './YardVerdict'
+import { StorageRow } from '../racks/StorageSummary'
 import clsx from 'clsx'
 import { X, Box, Play, Columns3, MapPin, Ruler, Truck, DoorOpen, Zap, Calendar, Tag, Home, ScanLine, Plane, Star, Sparkles, FlaskConical, PencilRuler } from 'lucide-react'
 import { DEV_SIM, useStore } from '../lib/store'
@@ -48,6 +51,7 @@ export default function WarehouseCard() {
   const openStage = useStore((s) => s.openStage)
   const shortlisted = useStore((s) => (id ? s.shortlist.includes(id) : false))
   const shortlistDo = useStore((s) => s.shortlistDo)
+  const cardDetail = useStore((s) => s.cardDetail)
   const detail = useAsync(id ? () => loadDetail(id) : null, [id])
   const twin = useAsync(id ? () => loadTwin(id) : null, [id])
   if (!id || !pin) return null
@@ -58,6 +62,11 @@ export default function WarehouseCard() {
     openStage({ modelId: scan.model_id, title: pin.address, subtitle: mode === 'markDoors' ? 'Mark dock doors' : 'Matterport 3D interior', mode, propertyId: id })
   }
   const ask = () => askGuide(`Tell me about ${pin.address}. What matters for me here?`, { id, address: pin.address })
+  if (!cardDetail) {
+    return <PropertyHud id={id} pin={pin} w={w ?? null} twin={twin.data ?? null} result={result} excluded={excluded} ranked={ranked}
+      scan={scan} photo={pin.photo ?? twin.data?.media?.ortho ?? `/media/twins/exterior/${id}_ortho.jpg`}
+      onDetail={(t) => { setTab(t); useStore.setState({ cardDetail: true }) }} />
+  }
   const tabs = (DEV_SIM ? ['overview', 'test', 'simulate'] : ['overview', 'test']) as ('overview' | 'test' | 'simulate')[]
   const TAB_LABEL = { overview: 'Evidence', test: 'Test it', simulate: 'Shift sim (dev)' }
 
@@ -78,17 +87,18 @@ export default function WarehouseCard() {
         </div>
       </Hero>
       <div className="absolute right-3 top-3 flex gap-1.5">
-        <button onClick={() => shortlistDo(shortlisted ? 'remove' : 'add', id)} title={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'}
+        <button onClick={() => shortlistDo(shortlisted ? 'remove' : 'add', id)} title={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'} aria-label={shortlisted ? 'Remove from shortlist' : 'Add to shortlist'}
           className={clsx('flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] backdrop-blur-md transition',
             shortlisted ? 'bg-warn text-bg' : 'bg-black/50 text-ink hover:bg-black/70')}>
           <Star size={14} fill={shortlisted ? 'currentColor' : 'none'} /> {shortlisted ? 'Shortlisted' : 'Shortlist'}
         </button>
-        <button onClick={() => toggleCompare(id)} title={compareIds.includes(id) ? 'Remove from compare' : 'Add to compare'}
+        <button onClick={() => toggleCompare(id)} title={compareIds.includes(id) ? 'Remove from compare' : 'Add to compare'} aria-label={compareIds.includes(id) ? 'Remove from compare' : 'Add to compare'}
           className={clsx('flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] backdrop-blur-md transition',
             compareIds.includes(id) ? 'bg-accent text-bg' : 'bg-black/50 text-ink hover:bg-black/70')}>
           <Columns3 size={14} /> {compareIds.includes(id) ? 'Comparing' : ''}
         </button>
-        <button onClick={() => select(null)} title="Close" className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-ink backdrop-blur-md hover:bg-black/70"><X size={16} /></button>
+        <button onClick={() => useStore.setState({ cardDetail: false })} title="Back to the summary" aria-label="Back to the summary" className="flex h-8 items-center gap-1 rounded-lg bg-black/50 px-2.5 text-[12px] text-ink backdrop-blur-md hover:bg-black/70">Summary</button>
+        <button onClick={() => select(null)} title="Close" aria-label="Close" className="flex h-8 w-8 items-center justify-center rounded-lg bg-black/50 text-ink backdrop-blur-md hover:bg-black/70"><X size={16} /></button>
       </div>
 
       <div className="flex gap-1 border-b border-line px-4">
@@ -112,7 +122,10 @@ export default function WarehouseCard() {
               </div>
             )}
             <Specs w={w} loading={detail.loading} error={!!detail.error} />
-            <DocksRow id={id} />
+            <DocksRow id={id} scanId={scan?.model_id ?? null} title={w?.address ?? ''} />
+            <YardVerdictRow id={id} onWatch={() => (window as unknown as { __proinspectUi?: (c: string, a: unknown) => void })
+              .__proinspectUi?.('yardTest', { id, trucks: [{ type: 'semi_53', count: 5 }] })} />
+            <StorageRow id={id} />
             {ranked && result && result.checks.length > 1 && <FitChecklist checks={result.checks} />}
             <Aerial id={id} twin={twin.data} loading={twin.loading} error={twin.error} />
             <VexcelSection id={id} twin={() => loadTwin(id)} />
@@ -129,10 +142,10 @@ export default function WarehouseCard() {
         <footer className="grid grid-cols-[1fr_1fr_1.15fr] gap-2 border-t border-line p-3">
           <button disabled={!scan} onClick={() => walk('view')}
             className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white/[0.06] text-[13px] font-medium text-ink ring-1 ring-inset ring-line-2 transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
-            title={scan ? 'Walk the 3D interior scan' : 'No interior scan for this property'}>
+            title={scan ? 'Walk the 3D interior scan' : 'No interior scan for this property'} aria-label={scan ? 'Walk the 3D interior scan' : 'No interior scan for this property'}>
             <Box size={15} /> Walk inside
           </button>
-          <button onClick={ask} title="Ask the guide about this site"
+          <button onClick={ask} title="Ask the guide about this site" aria-label="Ask the guide about this site"
             className="flex h-10 items-center justify-center gap-2 rounded-xl bg-white/[0.06] text-[13px] font-medium text-ink ring-1 ring-inset ring-line-2 transition hover:bg-white/10">
             <Sparkles size={14} className="text-accent" /> Ask guide
           </button>
@@ -147,7 +160,7 @@ export default function WarehouseCard() {
 }
 
 /** "Docks: 23 CoStar · 9 seen · 6 trailers at doors · Review" -> opens the 2D dock editor */
-function DocksRow({ id }: { id: number }) {
+function DocksRow({ id, scanId, title }: { id: number; scanId: string | null; title: string }) {
   const st = useAsync(() => docksApi.get(id), [id])
   const s = (st.data as DockStore | null)?.summary
   const confirmed = (st.data as DockStore | null)?.doors.filter((d) => d.status === 'confirmed' || d.status === 'user_added').length ?? 0
@@ -188,6 +201,12 @@ function DocksRow({ id }: { id: number }) {
         </div>
         {s && <span className="shrink-0 rounded-lg bg-accent/15 px-2.5 py-1 text-[12px] font-semibold text-accent ring-1 ring-inset ring-accent/30">Review</span>}
       </button>
+      {scanId && s && (
+        <button data-testid="align-doors-3d" onClick={() => useStore.getState().openStage({ modelId: scanId, title, subtitle: 'Align dock doors', mode: 'align', propertyId: id })}
+          className="mt-1.5 w-full rounded-lg px-3 py-1.5 text-left text-[11.5px] text-ink-3 ring-1 ring-inset ring-line hover:bg-white/[0.04] hover:text-ink">
+          Inside the scan: <span className="text-accent">align these doors with the real ones (one click) →</span>
+        </button>
+      )}
     </div>
   )
 }
@@ -317,7 +336,7 @@ function AltBars({ main, alts, fmt }: { main: { value: number; source: string };
   return (
     <div className="mt-2 space-y-1" title="Reported (CoStar) vs measured">
       {rows.map((r, i) => (
-        <div key={i} className="flex items-center gap-1.5 text-[10px] text-ink-3">
+        <div key={i} className="flex items-center gap-1.5 text-[11px] text-ink-3">
           <span className="w-[58px] shrink-0 truncate">{r.source === 'matterport' ? 'Scan' : r.source === 'vexcel' ? 'Aerial' : 'CoStar'}</span>
           <div className="h-1.5 flex-1 rounded-full bg-white/[0.06]"><div className={clsx('h-full rounded-full', COLORS[r.source] ?? 'bg-ink-3')} style={{ width: `${(r.value / max) * 100}%` }} /></div>
           <span className="w-[42px] shrink-0 text-right tabular-nums text-ink-2">{fmt(r.value)}</span>
@@ -336,7 +355,7 @@ function FitChecklist({ checks }: { checks: NonNullable<ReturnType<typeof useSto
           <div key={c.fact} className="flex items-center gap-3 bg-white/[0.02] px-3 py-2.5">
             <StatusIcon status={c.status} />
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] text-ink">{c.label}{c.level === 'D' && <span className="ml-1.5 text-[10px] uppercase tracking-wide text-ink-3">must</span>}</div>
+              <div className="text-[13px] text-ink">{c.label}{c.level === 'D' && <span className="ml-1.5 text-[11px] uppercase tracking-wide text-ink-3">must</span>}</div>
               <div className="text-[11px] text-ink-3">need {fmtNeed(c.need, c.unit)}</div>
             </div>
             <div className="text-right">
@@ -404,7 +423,7 @@ function Aerial({ id, twin, loading, error }: { id: number; twin: Twin | null; l
             ))}
           </svg>
         )}
-        <div className="absolute bottom-2 left-2 flex gap-2 rounded-md bg-black/60 px-2 py-1 text-[10px] text-ink-2 backdrop-blur">
+        <div className="absolute bottom-2 left-2 flex gap-2 rounded-md bg-black/60 px-2 py-1 text-[11px] text-ink-2 backdrop-blur">
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-accent" />Dock door</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-warn" />Drive-in</span>
           <span className="flex items-center gap-1"><span className="h-2 w-2 border border-accent" />Building</span>
@@ -431,7 +450,7 @@ function ObliqueThumb({ label, src, active, onClick }: { label: string; src: str
   return (
     <button onClick={onClick} className={clsx('relative h-12 flex-1 overflow-hidden rounded-lg ring-1 ring-inset', active ? 'ring-accent' : 'ring-line hover:ring-line-2')}>
       <img src={src} alt="" className="h-full w-full object-cover" />
-      <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[9px] uppercase tracking-wide text-ink-2">{label}</span>
+      <span className="absolute inset-x-0 bottom-0 bg-black/60 text-center text-[11px] uppercase tracking-wide text-ink-2">{label}</span>
     </button>
   )
 }
@@ -439,9 +458,9 @@ function ObliqueThumb({ label, src, active, onClick }: { label: string; src: str
 function Mini({ label, value, sub, title }: { label: string; value: string | null; sub?: string; title?: string }) {
   return (
     <div className="rounded-lg bg-white/[0.03] px-2.5 py-2 ring-1 ring-inset ring-line" title={title}>
-      <div className="text-[10px] text-ink-3">{label}</div>
+      <div className="text-[11px] text-ink-3">{label}</div>
       <div className="mt-0.5 text-[14px] font-semibold tabular-nums">{value ?? <span className="text-ink-3" title={UNKNOWN_WHY}>?</span>}</div>
-      {sub && <div className="truncate text-[10px] text-ink-2">{sub}</div>}
+      {sub && <div className="truncate text-[11px] text-ink-2">{sub}</div>}
     </div>
   )
 }
@@ -478,7 +497,7 @@ function Inside({ w, twin, scan, onOpen, onMarkDoors }: { w: WarehouseDetail | n
         </button>
       )}
       {scan && (
-        <button onClick={onMarkDoors} title="Optional cross-check: click the two edges of each real dock door in the 3D scan."
+        <button onClick={onMarkDoors} title="Optional cross-check: click the two edges of each real dock door in the 3D scan." aria-label="Optional cross-check: click the two edges of each real dock door in the 3D scan."
           className="mt-2 flex w-full items-center gap-2.5 rounded-xl bg-white/[0.03] px-3 py-2.5 text-left ring-1 ring-inset ring-line transition hover:bg-white/[0.06] hover:ring-line-2">
           <PencilRuler size={15} className="shrink-0 text-warn" />
           <div className="min-w-0 flex-1">

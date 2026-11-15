@@ -56,10 +56,10 @@ export default function PlacePopup() {
               {place.likelihood && <span className={place.likelihood === 'likely' ? 'rounded bg-good/15 px-1.5 text-good' : 'rounded bg-warn/15 px-1.5 text-warn'}
                 title={isNum(place.score) ? `Vexcel image-embedding match, score ${place.score.toFixed(2)}. A match, not a confirmed place.` : 'Vexcel image-embedding match'}>{place.likelihood}</span>}
               {dist && <span className="tabular-nums">{dist} away</span>}
-              <span className="inline-flex h-[16px] items-center rounded px-1 text-[9px] font-medium uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/25">Vexcel</span>
+              <span className="inline-flex h-[16px] items-center rounded px-1 text-[11px] font-medium uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/25">Vexcel</span>
             </div>
           </div>
-          <button onClick={() => setPlace(null)} title="Hide" className="rounded p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink"><X size={13} /></button>
+          <button onClick={() => setPlace(null)} title="Hide" aria-label="Hide" className="rounded p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink"><X size={13} /></button>
         </div>
       </div>
       <div data-stem className="mx-auto h-3 w-px bg-warn/80" />

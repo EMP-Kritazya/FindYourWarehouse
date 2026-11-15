@@ -2,6 +2,8 @@
 // Everything comes from POST /api/compare: criteria picked for the operation, per-candidate values with their kind
 // (verified = solid, estimated = outlined, unknown = "?"), a winner only beyond tolerance, tradeoffs, fit and a
 // deterministic recommendation. "Show all details" expands the old full rows.
+import { YardVerdictCell } from './YardVerdict'
+import { StorageCell } from '../racks/StorageSummary'
 import { useEffect, useMemo, useState } from 'react'
 import { X, ChevronDown, Star, AlertTriangle, Check, Minus, Box } from 'lucide-react'
 import clsx from 'clsx'
@@ -33,7 +35,7 @@ export default function CompareView() {
   const [ops, setOps] = useState<Operation[]>([])
   const [details, setDetails] = useState(false)
   const key = ids.join(',')
-  const res = useAsync<CompareResult>(open && ids.length >= 2 ? () => compareApi.compare(ids, profile) : null, [key, profile, open])
+  const res = useAsync<CompareResult>(open && ids.length >= 3 ? () => compareApi.compare(ids, profile) : null, [key, profile, open])
 
   useEffect(() => {
     if (!open) return
@@ -41,7 +43,7 @@ export default function CompareView() {
   }, [open])
   useEffect(() => setDetails(false), [key])
 
-  if (!open || ids.length < 2) return null
+  if (!open || ids.length < 3) return null      // two buildings get the head-to-head view (CompareDuel)
   const c = res.data
   const letter = (id: number) => LETTERS[ids.indexOf(id)] ?? '?'
   const addr = (id: number) => c?.candidates.find((x) => x.id === id)?.address ?? String(id)
@@ -53,7 +55,7 @@ export default function CompareView() {
           <h2 className="text-[15px] font-semibold tracking-tight">Compare {ids.length} warehouses</h2>
           <div className="text-[11px] text-ink-3">Solid = CoStar · outlined = estimate · ? = unknown</div>
         </div>
-        <button onClick={() => show(false)} title="Close (Esc)" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] hover:bg-white/10"><X size={16} /></button>
+        <button onClick={() => show(false)} title="Close (Esc)" aria-label="Close (Esc)" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] hover:bg-white/10"><X size={16} /></button>
       </header>
 
       <div className="scroll-thin flex-1 overflow-y-auto px-4 pb-4">
@@ -68,13 +70,13 @@ export default function CompareView() {
                 className={clsx('group min-w-0 rounded-xl bg-panel-2 p-1.5 text-left ring-1 transition hover:bg-panel-3', rec ? 'ring-accent/70' : 'ring-line')}>
                 <div className="relative aspect-[16/10] overflow-hidden rounded-lg bg-panel-3">
                   <img src={cand?.thumb ?? `/media/twins/exterior/${id}_ortho.jpg`} alt="" className="h-full w-full object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
-                  <span className="absolute left-1 top-1 rounded bg-black/65 px-1 text-[10px] font-semibold text-ink">{letter(id)}</span>
+                  <span className="absolute left-1 top-1 rounded bg-black/65 px-1 text-[11px] font-semibold text-ink">{letter(id)}</span>
                   {rec && <span className="absolute right-1 top-1 rounded bg-accent px-1 text-bg" title="Recommended"><Star size={10} className="my-[2px]" fill="currentColor" /></span>}
                 </div>
                 <div className="mt-1 truncate text-[11.5px] font-medium leading-tight">{cand?.address ?? <Skeleton className="h-3 w-16" />}</div>
                 <div className="mt-1 flex items-center gap-1">
                   {fit ? <span title={(c?.fit_why[String(id)] ?? []).join('\n') || 'Passes every deal-breaker'}
-                    className={clsx('inline-flex h-[17px] items-center rounded px-1.5 text-[10px] font-semibold ring-1 ring-inset', FIT_STYLE[fit])}>{FIT_LABEL[fit]}</span>
+                    className={clsx('inline-flex h-[17px] items-center rounded px-1.5 text-[11px] font-semibold ring-1 ring-inset', FIT_STYLE[fit])}>{FIT_LABEL[fit]}</span>
                     : <Skeleton className="h-3.5 w-10" />}
                   {cand?.inspectable && <Box size={11} className="text-ink-3" aria-label="3D scan" />}
                 </div>
@@ -109,11 +111,11 @@ export default function CompareView() {
               <p className="text-[13px] leading-snug text-ink">{c.recommendation.text}</p>
               {c.recommendation.basis.length > 0 && (
                 <div className="mt-2 flex flex-wrap items-center gap-1">
-                  <span className="text-[10.5px] text-ink-3">Why</span>
+                  <span className="text-[11px] text-ink-3">Why</span>
                   {c.recommendation.basis.map((k) => {
                     const r = c.rows.find((x) => x.key === k)
                     return <span key={k} title={c.criteria.find((x) => x.key === k)?.why}
-                      className="rounded-full bg-accent/15 px-2 py-[1px] text-[10.5px] font-medium text-accent">{r?.label ?? k}</span>
+                      className="rounded-full bg-accent/15 px-2 py-[1px] text-[11px] font-medium text-accent">{r?.label ?? k}</span>
                   })}
                 </div>
               )}
@@ -123,11 +125,43 @@ export default function CompareView() {
             <section className="mt-3">
               <div className="mb-1.5 flex items-baseline justify-between">
                 <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{c.operation.name} criteria</h3>
-                <span className="text-[10.5px] text-ink-3">weight</span>
+                <span className="text-[11px] text-ink-3">weight</span>
               </div>
               <div className="divide-y divide-line rounded-xl bg-panel-2/60 ring-1 ring-line">
                 {c.rows.slice(0, 7).map((r) => <CriterionRow key={r.key} row={r} ids={ids} letter={letter}
                   why={c.criteria.find((x) => x.key === r.key)?.why} />)}
+              </div>
+            </section>
+
+            {/* the same yard test on every candidate (5 x 53 ft semis) */}
+            <section className="mt-3">
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Yard test · 5 × 53 ft semis</h3>
+                <span className="text-[11px] text-ink-3">same test each</span>
+              </div>
+              <div className="grid gap-2 rounded-xl bg-panel-2/60 p-2.5 ring-1 ring-line" style={{ gridTemplateColumns: `repeat(${ids.length}, minmax(0, 1fr))` }}>
+                {ids.map((id) => (
+                  <div key={id} className="min-w-0">
+                    <div className="mb-1 text-[11px] font-semibold text-ink-3">{letter(id)}</div>
+                    <YardVerdictCell id={id} />
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            {/* storage capacity on the scanned floor (reach truck, same rules each) */}
+            <section className="mt-3">
+              <div className="mb-1.5 flex items-baseline justify-between">
+                <h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Storage · pallet positions</h3>
+                <span className="text-[11px] text-ink-3">reach truck · racks on each scan</span>
+              </div>
+              <div className="grid gap-2 rounded-xl bg-panel-2/60 p-2.5 ring-1 ring-line" style={{ gridTemplateColumns: `repeat(${ids.length}, minmax(0, 1fr))` }}>
+                {ids.map((id) => (
+                  <div key={id} className="min-w-0">
+                    <div className="mb-1 text-[11px] font-semibold text-ink-3">{letter(id)}</div>
+                    <StorageCell id={id} />
+                  </div>
+                ))}
               </div>
             </section>
 
@@ -191,7 +225,7 @@ function CriterionRow({ row, ids, letter, why }: { row: CmpRow; ids: number[]; l
     <div className="px-3 py-2">
       <div className="flex items-center gap-2">
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium text-ink" title={why}>
-          {row.label}{row.level === 'D' && <span className="ml-1 text-[10px] font-semibold text-warn" title="Deal-breaker">must</span>}
+          {row.label}{row.level === 'D' && <span className="ml-1 text-[11px] font-semibold text-warn" title="Deal-breaker">must</span>}
         </span>
         <WeightDots n={row.weight} />
         <span className="w-[74px] text-right"><Verdict row={row} letter={letter} /></span>
@@ -210,7 +244,7 @@ function ValueCell({ v, letter, win, frac, better }: { v?: CmpValue; letter: str
   if (!v || v.kind === 'unknown')
     return (
       <div title={v?.basis ?? 'Unknown'} className="flex h-[38px] cursor-help flex-col justify-center rounded-md bg-white/[0.02] px-1.5 ring-1 ring-inset ring-white/[0.06]">
-        <span className="text-[9.5px] font-semibold text-ink-3">{letter}</span>
+        <span className="text-[11px] font-semibold text-ink-3">{letter}</span>
         <span className="text-[12.5px] font-semibold text-ink-3">?</span>
       </div>
     )
@@ -220,7 +254,7 @@ function ValueCell({ v, letter, win, frac, better }: { v?: CmpValue; letter: str
     <div title={tip} className={clsx('relative flex h-[38px] flex-col justify-center overflow-hidden rounded-md px-1.5',
       est ? 'border border-dashed border-ink-3/60 bg-transparent' : 'bg-panel-3',
       win && 'ring-1 ring-inset ring-accent/80')}>
-      <span className="flex items-center gap-1 text-[9.5px] font-semibold text-ink-3">{letter}{win && <span className="h-[5px] w-[5px] rounded-full bg-accent" />}{est && <span className="font-normal">est.</span>}</span>
+      <span className="flex items-center gap-1 text-[11px] font-semibold text-ink-3">{letter}{win && <span className="h-[5px] w-[5px] rounded-full bg-accent" />}{est && <span className="font-normal">est.</span>}</span>
       <span className={clsx('truncate text-[12.5px] font-semibold tabular-nums', win ? 'text-accent' : est ? 'text-ink-2' : 'text-ink')}>{v.display}</span>
       {frac != null && (
         <span className="absolute inset-x-1.5 bottom-[3px] h-[2px] rounded-full bg-white/[0.05]">
@@ -267,7 +301,7 @@ function AllDetails({ ids, letter }: { ids: number[]; letter: (id: number) => st
   const ws = det.data ?? []
   const vs = vex.data ?? []
   const cols = { gridTemplateColumns: `112px repeat(${ids.length}, minmax(0, 1fr))` }
-  const header = useMemo(() => ids.map((id) => <div key={id} className="text-[10.5px] font-semibold text-ink-3">{letter(id)}</div>), [k])
+  const header = useMemo(() => ids.map((id) => <div key={id} className="text-[11px] font-semibold text-ink-3">{letter(id)}</div>), [k])
   return (
     <div className="mt-2 text-[12px]">
       <div className="grid gap-x-2 pb-1" style={cols}><div />{header}</div>
@@ -286,8 +320,8 @@ function AllDetails({ ids, letter }: { ids: number[]; letter: (id: number) => st
           })}
         </div>
       ))}
-      <div className="mt-1 text-[10.5px] text-ink-3">Dotted underline = measured or derived, not CoStar.</div>
-      <div className="mt-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[0.08em] text-amber-300/80">From the air · Vexcel</div>
+      <div className="mt-1 text-[11px] text-ink-3">Dotted underline = measured or derived, not CoStar.</div>
+      <div className="mt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-300/80">From the air · Vexcel</div>
       {VROWS.map((row) => (
         <div key={row.label} className="grid items-center gap-x-2 border-t border-line py-1.5" style={cols}>
           <div className="truncate text-ink-3">{row.label}</div>

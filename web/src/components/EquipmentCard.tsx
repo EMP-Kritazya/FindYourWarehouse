@@ -49,7 +49,7 @@ export default function EquipmentCard({ itemKey, item, selected, onClick, frameF
         <div className="min-w-0 flex-1">
           <div className={clsx('text-[12.5px] font-semibold leading-tight', compact ? 'truncate' : 'line-clamp-2 min-h-[2lh]')} title={item.name}>{item.name ?? itemKey}</div>
           {item.category && (
-            <span className="mt-1 inline-flex h-[16px] items-center rounded bg-white/[0.06] px-1.5 text-[9.5px] font-medium uppercase tracking-[0.06em] text-ink-3">
+            <span className="mt-1 inline-flex h-[16px] items-center rounded bg-white/[0.06] px-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-ink-3">
               {CATEGORY_LABEL[item.category] ?? item.category}
             </span>
           )}
@@ -57,9 +57,9 @@ export default function EquipmentCard({ itemKey, item, selected, onClick, frameF
         {right}
       </div>
       {compact ? (
-        <div className="mt-1 truncate font-mono text-[10.5px] tabular-nums text-ink-3">{specs[0][1]} · turn {specs[1][1]}</div>
+        <div className="mt-1 truncate font-mono text-[11px] tabular-nums text-ink-3">{specs[0][1]} · turn {specs[1][1]}</div>
       ) : (
-        <dl className="mt-1.5 grid w-full grid-cols-3 gap-x-2 gap-y-0.5 text-[10.5px] tabular-nums">
+        <dl className="mt-1.5 grid w-full grid-cols-3 gap-x-2 gap-y-0.5 text-[11px] tabular-nums">
           {specs.map(([k, v], i) => (
             <div key={k} className={clsx('flex min-w-0 items-baseline gap-1', i === 0 ? 'col-span-3 justify-between' : 'flex-col gap-0')}>
               <dt className="text-ink-3">{k}</dt>

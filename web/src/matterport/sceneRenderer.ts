@@ -104,6 +104,7 @@ export function instancedBoxes(T: T3, boxes: { x: number; y: number; z: number; 
 }
 
 interface VehicleObj {
+  forks?: any;
   id: string;
   kind: string;
   keys: VehicleKey[];
@@ -177,8 +178,45 @@ export class SceneRenderer {
       g.add(boxEdges(T, boxes, 0xffffff, 0.5));
     }
 
-    // racks: translucent boxes + crisp edges
-    const racks = sc.racks ?? [];
+    // racks: real structure (uprights, beams per level, loaded pallets) when the plan gives bays/levels,
+    // else the old translucent boxes
+    const detailed = (sc.racks ?? []).filter((r) => r.bays && r.levels)
+    if (detailed.length) {
+      g.add(...this.rackStructure(T, detailed, fy));
+      const amb = new T.AmbientLight(0xffffff, 0.55);
+      const sun = new T.DirectionalLight(0xffffff, 0.75);
+      sun.position.set(30, 60, 20);
+      const hemi = new T.HemisphereLight(0xeef3ff, 0x5a4a3a, 0.35);
+      g.add(amb, sun, hemi);
+    }
+    for (const rm of sc.removed ?? []) {
+      if (rm.ring.length < 3) continue;
+      const pts = [...rm.ring, rm.ring[0]].map(([x, z]) => new T.Vector3(x, fy + 0.05, z));
+      const line = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: 0xff4d4d, transparent: true, opacity: 0.9, depthTest: false }));
+      line.renderOrder = 6;
+      g.add(line);
+    }
+    const ZONE_RGB: Record<string, number> = { open: 0x22c55e, shelving: 0xf59e0b, selective: 0x4fd1c5, dense: 0xa78bfa, cantilever: 0xd97706 }
+    for (const zn of sc.zones ?? []) {
+      if (zn.ring.length < 3) continue
+      const col = ZONE_RGB[zn.type] ?? 0x9ca3af
+      const shape = new T.Shape(zn.ring.map(([x, z]) => new T.Vector2(x, -z)))
+      const mesh = new T.Mesh(new T.ShapeGeometry(shape), new T.MeshBasicMaterial({ color: col, transparent: true, opacity: zn.type === 'open' ? 0.22 : 0.08, depthWrite: false, side: T.DoubleSide }))
+      mesh.rotation.x = -Math.PI / 2
+      mesh.position.y = fy + 0.03
+      mesh.renderOrder = 2
+      g.add(mesh)
+      const pts = [...zn.ring, zn.ring[0]].map(([x, z]) => new T.Vector3(x, fy + 0.04, z))
+      g.add(new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineBasicMaterial({ color: col, transparent: true, opacity: 0.9 })))
+      if (zn.type === 'open') {
+        const cx = zn.ring.reduce((a, p) => a + p[0], 0) / zn.ring.length, cz = zn.ring.reduce((a, p) => a + p[1], 0) / zn.ring.length
+        const lab = makeLabel(T, this.doc, zn.label, col)
+        lab.position.set(cx, fy + 2.5, cz)
+        this.labels.push(lab)
+        g.add(lab)
+      }
+    }
+    const racks = (sc.racks ?? []).filter((r) => !(r.bays && r.levels));
     if (racks.length) {
       const boxes = racks.map((r) => ({ x: r.x, y: fy + r.h / 2, z: r.z, w: r.w, h: r.h, d: r.d, yaw: r.yaw ?? 0 }));
       const m = instancedBoxes(T, boxes, new T.MeshBasicMaterial({ color: 0x3b6fd8, transparent: true, opacity: 0.28, depthWrite: false, side: T.DoubleSide }));
@@ -209,6 +247,18 @@ export class SceneRenderer {
       mast.position.set(dims.l / 2 - 0.1, dims.h / 2, 0);
       vg.add(mast);
       vg.add(boxEdges(T, [{ x: 0, y: dims.h * 0.275, z: 0, w: dims.l, h: dims.h * 0.55, d: dims.w, yaw: 0 }], 0x111111, 1));
+      // forks (two tines on a carriage) that ride up the mast with key[5]
+      const forks = new T.Group();
+      for (const zz of [-dims.w * 0.22, dims.w * 0.22]) {
+        const tine = new T.Mesh(new T.BoxGeometry(1.1, 0.05, 0.12), mat(0x23262b));
+        tine.position.set(dims.l / 2 + 0.55, 0, zz);
+        forks.add(tine);
+      }
+      const carriage = new T.Mesh(new T.BoxGeometry(0.08, 0.9, dims.w * 0.75), mat(0x30343a));
+      carriage.position.set(dims.l / 2 + 0.02, 0.45, 0);
+      forks.add(carriage);
+      forks.position.y = 0.1;
+      vg.add(forks);
       const load = new T.Mesh(new T.BoxGeometry(1.2, 1.1, 1.0), mat(0xc8955a));
       load.position.set(dims.l / 2 + 0.6, 0.65, 0);
       load.visible = false;
@@ -221,7 +271,7 @@ export class SceneRenderer {
       g.add(vg);
       const last = v.keys[v.keys.length - 1][0];
       if (last > this.duration) this.duration = last;
-      this.vehicles.push({ id: String(v.id), kind: v.kind, keys: v.keys, group: vg, load, cursor: 0, pos: { x: v.keys[0][1], z: v.keys[0][2] } });
+      this.vehicles.push({ id: String(v.id), kind: v.kind, keys: v.keys, group: vg, load, forks, cursor: 0, pos: { x: v.keys[0][1], z: v.keys[0][2] } });
     }
     for (const t of sc.trucks ?? []) if ((t.depart_s ?? 0) > this.duration) this.duration = t.depart_s!;
 
@@ -255,6 +305,78 @@ export class SceneRenderer {
     for (const l of this.labels) l.visible = on;
   }
 
+  /** Rack rows as real structure: blue uprights at every bay line on both faces, orange beams at every level, a
+   *  loaded pallet on each beam pair (x deep). Unreachable rows (ok === false) are tinted red. Instanced: thousands
+   *  of pallets stay cheap. Row frame: local x = w, local z = d; rows run along `along`. */
+  rackStructure(T: any, rows: NonNullable<SimScene['racks']>, fy: number) {
+    const uprights: any[] = [], beams: any[] = [], pallets: any[] = [], bad: any[] = [], lumber: any[] = [], bases: any[] = []
+    const put = (r: any, lx: number, ly: number, lz: number, w: number, h: number, d: number, list: any[]) => {
+      const yaw = r.yaw ?? 0, c = Math.cos(yaw), s = Math.sin(yaw)
+      list.push({ x: r.x + c * lx + s * lz, y: fy + ly, z: r.z - s * lx + c * lz, w, h, d, yaw })
+    }
+    for (const r of rows) {
+      const along = r.along ?? 'd'
+      const L = along === 'd' ? r.d : r.w, D = along === 'd' ? r.w : r.d       // row length / rack depth
+      const bays = r.bays!, levels = r.levels!, lh = r.level_h ?? 1.68, deep = r.deep ?? 1
+      const H = levels * lh, bay = L / bays
+      const shelf = r.type === 'shelving'
+      // place in row frame (a = along the row, b = across) then map to local x/z
+      const P = (a: number, y: number, b: number, sa: number, sh: number, sb: number, list: any[]) =>
+        along === 'd' ? put(r, b, y, a, sb, sh, sa, list) : put(r, a, y, b, sa, sh, sb, list)
+      const target = r.ok === false ? bad : null
+      if (r.type === 'cantilever') {
+        // a centre spine of columns, arms out to both faces at every level, a lumber bundle on each arm level
+        for (let i = 0; i <= bays; i++) {
+          const a = -L / 2 + i * bay
+          P(a, H / 2, 0, 0.25, H, 0.3, target ?? uprights)
+          for (let lv = 0; lv < levels; lv++) P(a, lv * lh + 0.25, 0, 0.12, 0.1, D, target ?? beams)
+        }
+        for (let lv = 0; lv < levels; lv++) {
+          for (const b of [-D / 4, D / 4]) P(0, lv * lh + 0.55, b, L * 0.98, 0.5, D / 2 - 0.15, lumber)
+        }
+        continue
+      }
+      for (let i = 0; i <= bays; i++) {
+        const a = -L / 2 + i * bay
+        for (const b of [-D / 2 + 0.04, D / 2 - 0.04]) P(a, H / 2, b, 0.075, H, 0.075, target ?? uprights)
+      }
+      for (let lv = 1; lv <= levels; lv++) {
+        const y = lv * lh - 0.06
+        for (const b of [-D / 2 + 0.04, D / 2 - 0.04]) P(0, y, b, L, 0.11, 0.05, target ?? beams)
+      }
+      if (shelf) continue
+      // pallets: 2 per bay per level on each face (x deep), sitting on the beam below each level
+      const faces = deep > 1 ? [-D / 2 + D / 8, -D / 8, D / 8, D / 2 - D / 8] : [-D / 4, D / 4]
+      const pd = deep > 1 ? D / 4 - 0.08 : D / 2 - 0.12
+      for (let i = 0; i < bays; i++) {
+        for (let k = 0; k < 2; k++) {
+          const a = -L / 2 + i * bay + bay * (k === 0 ? 0.27 : 0.73)
+          for (let lv = 0; lv < levels; lv++) {
+            const base = lv * lh + (lv === 0 ? 0.0 : 0.02)
+            if (((i * 7 + k * 3 + lv * 5) % 11) === 0) continue          // a few empty slots read as a working warehouse
+            for (const b of faces) {
+              P(a, base + 0.07, b, bay * 0.43, 0.14, pd, bases)          // the wooden pallet
+              P(a, base + 0.14 + 0.55, b, bay * 0.40, 1.1, pd - 0.06, pallets)   // the shrink-wrapped load
+            }
+          }
+        }
+      }
+    }
+    const out: any[] = []
+    const mk = (list: any[], color: number, opacity = 1, vary = 0) => {
+      if (!list.length) return
+      if (vary) {                                                   // per-instance shade so loads don't merge into a wall
+        const base = new T.Color(color)
+        list.forEach((b, i) => { const f = 1 - vary / 2 + ((i * 2654435761) % 1000) / 1000 * vary; b.color = base.clone().multiplyScalar(f) })
+      }
+      const m = instancedBoxes(T, list, new T.MeshLambertMaterial({ color: vary ? 0xffffff : color, transparent: opacity < 1, opacity }))
+      m.renderOrder = 3
+      out.push(m)
+    }
+    mk(uprights, 0x1f5fbf); mk(beams, 0xe8771c); mk(bases, 0x7a5a36); mk(pallets, 0xcfb38a, 1, 0.35); mk(lumber, 0xd8b077, 1, 0.25); mk(bad, 0xff4d4d, 0.85)
+    return out
+  }
+
   /** Place every vehicle at sim time t (linear interpolation of key-frames). */
   update(t: number) {
     const fy = this.scene?.floor_y ?? 0;
@@ -277,6 +399,10 @@ export class SceneRenderer {
       v.group.position.set(x, fy, z);
       v.group.rotation.y = yaw;
       v.load.visible = a[4] === 'loaded' || a[4] === 'drop';
+      const fa = a[5] ?? 0, fb = b[5] ?? fa
+      const fk = b !== a && b[0] > a[0] ? fa + (fb - fa) * Math.min(1, Math.max(0, (t - a[0]) / (b[0] - a[0]))) : fa
+      v.load.position.y = 0.65 + fk
+      if (v.forks) v.forks.position.y = 0.1 + fk
       v.pos.x = x; v.pos.z = z;
     }
     // doors light up while a truck is docked

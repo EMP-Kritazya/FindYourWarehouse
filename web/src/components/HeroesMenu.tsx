@@ -48,7 +48,7 @@ export default function HeroesMenu() {
   }
   return (
     <div ref={ref} className="relative">
-      <button onClick={() => setOpen(!open)} title="Demo property: open its tests"
+      <button onClick={() => setOpen(!open)} title="Demo property: open its tests" aria-label="Demo property: open its tests"
         className={clsx('flex h-7 items-center gap-1.5 rounded-lg px-2 text-[12px] transition',
           open ? 'bg-white/10 text-ink' : 'text-ink-3 hover:bg-white/5 hover:text-ink-2')}>
         <PlayCircle size={14} /> Demos

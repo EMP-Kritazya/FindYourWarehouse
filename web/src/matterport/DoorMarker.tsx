@@ -177,8 +177,8 @@ export default function DoorMarker({ ctl, ready, propertyId, modelId, store, sou
         {!!doors.length && <label style={S.lbl}><input type="checkbox" checked={sameWidth} onChange={(e) => setSameWidth(e.target.checked)} /> same width</label>}
       </div>
       <div style={S.row}>
-        <button style={S.btn} onClick={undo} disabled={!first && !drafts.length} title="Esc / Ctrl+Z">Undo</button>
-        {pitch && <button style={S.btn} onClick={nextAtPitch} title="Adds a door at the same spacing as the last two; check it lands on a real door">+ next at same spacing ({(Math.hypot(pitch.x, pitch.z) / FT).toFixed(1)} ft)</button>}
+        <button style={S.btn} onClick={undo} disabled={!first && !drafts.length} title="Esc / Ctrl+Z" aria-label="Esc / Ctrl+Z">Undo</button>
+        {pitch && <button style={S.btn} onClick={nextAtPitch} title="Adds a door at the same spacing as the last two; check it lands on a real door" aria-label="Adds a door at the same spacing as the last two; check it lands on a real door">+ next at same spacing ({(Math.hypot(pitch.x, pitch.z) / FT).toFixed(1)} ft)</button>}
       </div>
       {!!doors.length && (
         <div style={S.list}>

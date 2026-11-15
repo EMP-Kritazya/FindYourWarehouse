@@ -39,7 +39,7 @@ export default function FitSummary({ result: r, heatOn, onHeat, playing, onPlay,
           </div>
           <div style={S.checks}>
             {r.checks.map((c, i) => (
-              <button key={i} style={S.check} disabled={!c.at} onClick={() => c.at && onFocus?.(c.at)} title={c.note ?? ''}>
+              <button key={i} style={S.check} disabled={!c.at} onClick={() => c.at && onFocus?.(c.at)} title={c.note ?? ''} aria-label={c.note ?? ''}>
                 <span style={{ color: col(c.ok), width: 14, fontWeight: 700 }}>{icon(c.ok)}</span>
                 <span style={{ flex: 1, textAlign: 'left' }}>{c.label ?? c.kind}</span>
                 {(c.need != null || c.have != null) && (

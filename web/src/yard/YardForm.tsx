@@ -83,7 +83,7 @@ export default function YardForm({ propertyId, onResult, doors, initial, compact
             {doors.map((d) => {
               const on = !picked || picked.has(d.id)
               return (
-                <button key={d.id} type="button" title={d.source}
+                <button key={d.id} type="button" title={d.source} aria-label={d.source}
                   onClick={() => { const s = new Set(picked ?? doors.map((x) => x.id)); if (on) s.delete(d.id); else s.add(d.id); setPicked(s) }}
                   className={`rounded px-1.5 py-0.5 font-mono text-[11px] ${on ? 'bg-accent/20 text-accent' : 'bg-panel-2 text-ink-3 line-through'}`}>{d.id}</button>
               )

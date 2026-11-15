@@ -15,8 +15,8 @@ const loadShortlist = (): number[] => {
 }
 const saveShortlist = (ids: number[]) => { try { localStorage.setItem(SHORTLIST_KEY, JSON.stringify(ids)) } catch { /* private mode */ } }
 
-export type StageMode = 'view' | 'markDoors' | 'fit'
-export type TestKind = 'yard' | 'equipment'
+export type StageMode = 'view' | 'markDoors' | 'fit' | 'align'
+export type TestKind = 'yard' | 'equipment' | 'storage'
 export interface PlaceMarker { lat: number; lon: number; label: string; thumb_url?: string; likelihood?: string; score?: number; distance_m?: number; nearId?: number }
 export interface RankState { metric: string; market: string; loading: boolean; error: string | null; data: Ranking | null }
 
@@ -46,6 +46,16 @@ interface State {
   yard: { propertyId: number; result: unknown | null } | null
   /** S3: the property whose Dock editor is open (replaces the card in the right column) */
   docksOpen: number | null
+  interiorOpen: { pid: number; modelId: string; title: string } | null
+  listOpen: boolean
+  /** the bottom strip's ids in on-screen order (the analyst reads it: "first" = [0]) */
+  visibleIds: number[]
+  /** what the buyer told the analyst (update_buyer_profile), shown as chips */
+  buyerProfile: Record<string, unknown> | null
+  /** an explicit list the analyst put on the strip (closest to X, comparables, a ranking within a set) */
+  curated: { title: string; ids: number[]; values?: Record<string, string> } | null
+  /** the full property card (evidence / tests) instead of the one-glance panel */
+  cardDetail: boolean
   shortlist: number[]
   /** latest test results by `yard:<id>` / `fit:<id>` */
   lastTest: Record<string, unknown>
@@ -107,6 +117,12 @@ export const useStore = create<State>((set, get) => ({
   testKind: null,
   yard: null,
   docksOpen: null,
+  interiorOpen: null,
+  listOpen: false,
+  visibleIds: [],
+  buyerProfile: null,
+  curated: null,
+  cardDetail: false,
   shortlist: loadShortlist(),
   lastTest: {},
   shortlistOpen: false,
@@ -160,7 +176,7 @@ export const useStore = create<State>((set, get) => ({
         res = await api.search({ chips: res.chips, requirements: { market: named } })
         if (seq !== searchSeq) return
       }
-      set({ search: res, searching: false, highlightIds: [], ranking: null })
+      set({ search: res, searching: false, highlightIds: [], ranking: null, curated: null })
       sendEvent('searchResults', {
         query: res.query, mode: res.mode, market: get().market, counts: res.counts,
         chips: res.chips.map((c) => ({ field: c.field, value: c.value, op: c.op })),
@@ -180,8 +196,9 @@ export const useStore = create<State>((set, get) => ({
 
   select: (id, opts = {}) => {
     const changed = id !== get().selectedId
-    set({ selectedId: id, drawerTab: opts.tab ?? (changed ? 'overview' : get().drawerTab), testKind: changed ? null : get().testKind })
-    mapApi.setPadding({ right: id == null ? 40 : 470 })
+    set({ selectedId: id, drawerTab: opts.tab ?? (changed ? 'overview' : get().drawerTab), testKind: changed ? null : get().testKind,
+          cardDetail: opts.tab === 'test' ? true : changed ? false : get().cardDetail })
+    mapApi.setPadding({ right: id == null ? 40 : 440 })
     if (id == null) return
     const pin = get().pinsById.get(id)
     if (pin && pin.market !== get().market) set({ market: pin.market })
@@ -213,7 +230,7 @@ export const useStore = create<State>((set, get) => ({
   },
   openTest: (id, kind) => {
     get().select(id, { tab: 'test' })
-    set({ drawerTab: 'test', testKind: kind })
+    set({ drawerTab: 'test', testKind: kind, cardDetail: true })
   },
   setYard: (y) => set({ yard: y }),
   shortlistDo: (action, id) => {
@@ -243,7 +260,7 @@ export const useStore = create<State>((set, get) => ({
   rankBy: async (metric, market) => {
     const m = market ?? get().market
     if (m !== get().market) get().setMarket(m)
-    set({ ranking: { metric, market: m, loading: true, error: null, data: get().ranking?.metric === metric ? get().ranking!.data : null } })
+    set({ curated: null, ranking: { metric, market: m, loading: true, error: null, data: get().ranking?.metric === metric ? get().ranking!.data : null } })
     try {
       const data = await rank(metric, m, get().pins)
       if (get().ranking?.metric !== metric) return
@@ -254,7 +271,7 @@ export const useStore = create<State>((set, get) => ({
       set({ ranking: { metric, market: m, loading: false, error: 'Ranking could not be computed', data: null } })
     }
   },
-  clearRanking: () => set({ ranking: null }),
+  clearRanking: () => set({ ranking: null, curated: null }),
   showAerial: (id, view, year) => {
     if (get().selectedId !== id) get().select(id, { tab: 'overview' })
     else set({ drawerTab: 'overview' })

@@ -65,7 +65,7 @@ export function SearchBar() {
           placeholder="Describe the space you need, in your own words"
           className="h-full flex-1 bg-transparent text-[14px] text-ink placeholder:text-ink-3 focus:outline-none" />
         {(query || search) && (
-          <button type="button" onClick={clearSearch} title="Clear search" className="rounded-md p-1 text-ink-3 hover:bg-white/5 hover:text-ink">
+          <button type="button" onClick={clearSearch} title="Clear search" aria-label="Clear search" className="rounded-md p-1 text-ink-3 hover:bg-white/5 hover:text-ink">
             <X size={16} />
           </button>
         )}
@@ -87,7 +87,7 @@ export function SearchBar() {
       {error && <div className="fade-up mt-2 rounded-lg bg-bad/10 px-3 py-2 text-[12px] text-bad ring-1 ring-bad/25">{error}</div>}
 
       {chips.length > 0 && (
-        <div className="fade-up mt-2 flex flex-wrap gap-1.5">
+        <div className="scroll-thin fade-up mt-1.5 flex gap-1.5 overflow-x-auto pb-1 pr-6 [&>*]:shrink-0" style={{ maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)' }} data-testid="search-chips">
           {chips.map((c, i) => (
             <ChipView key={`${c.field}-${i}`} chip={c}
               onRemove={() => runSearch({ chips: chips.filter((_, j) => j !== i) })}
@@ -133,12 +133,12 @@ function ChipView({ chip, onRemove, onChange }: { chip: Chip; onRemove: () => vo
           className="w-20 rounded bg-white/10 px-1 text-ink focus:outline-none" />
       ) : (
         <button onClick={() => (isBool ? onChange(!chip.value) : (setDraft(String(chip.value ?? '')), setEdit(true)))}
-          className="font-medium text-ink hover:text-accent" title="Edit">
+          className="font-medium text-ink hover:text-accent" title="Edit" aria-label="Edit">
           {chipValue(chip)}
         </button>
       )}
       {conflict && <AlertTriangle size={12} className="text-warn" />}
-      <button onClick={onRemove} title="Remove" className="rounded-full p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink">
+      <button onClick={onRemove} title="Remove" aria-label="Remove" className="rounded-full p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink">
         <X size={12} />
       </button>
     </span>

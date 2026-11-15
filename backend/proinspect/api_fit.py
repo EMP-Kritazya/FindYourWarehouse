@@ -49,9 +49,14 @@ def put_doors(pid: int, body: DoorsBody):
     if len(body.doors) > 200:
         raise HTTPException(422, "at most 200 doors per scan")
     try:
-        return door_store.save(m, pid, body.doors)
+        rec = door_store.save(m, pid, body.doors)
     except door_store.DoorError as e:
         raise HTTPException(422, str(e))
+    try:                                   # marked doors also go to the aerial dock store (map, yard, racks)
+        rec = {**rec, "dock_store_sync": door_store.sync_marked_to_dock_store(m, pid)}
+    except Exception as e:                 # noqa: BLE001
+        rec = {**rec, "dock_store_sync": {"synced": 0, "why": f"{type(e).__name__}: {str(e)[:120]}"}}
+    return rec
 
 
 @router.delete("/api/warehouses/{pid}/doors")

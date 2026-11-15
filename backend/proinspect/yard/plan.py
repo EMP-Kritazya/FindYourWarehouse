@@ -93,7 +93,7 @@ def _store_doors(pid):
     except Exception:  # noqa: BLE001
         return None, ["dock store (proinspect.docks) not available: using the v2 door sources"]
     try:
-        got = docks.usable_doors(pid)
+        got = docks.usable_doors(pid, kinds=("dock_high", "unknown", "drive_in"))   # drive-ins serve rigid trucks
     except Exception as exc:  # noqa: BLE001
         return None, [f"dock store failed ({exc}): using the v2 door sources"]
     if not got:
@@ -107,6 +107,7 @@ def _store_doors(pid):
         w = d.get("width_ft")
         out.append({"id": str(d.get("id") or f"k{i + 1}"), "x": float(d["x"]), "y": float(d["y"]),
                     "normal": list(_unit(n)), "width_m": (w or 9.0) * kin.FT, "kind": d.get("kind") or "unknown",
+                    "height_ft": d.get("height_ft"),
                     "status": st, "source": src})
     return out, [f"doors: {len(out)} from the dock store ({sum(d['source'] == 'confirmed' for d in out)} confirmed)"]
 
@@ -643,6 +644,26 @@ def _wall_face(grid, door, max_shift=2.0):
             return ({**door, "x": door["x"] + n[0] * o, "y": door["y"] + n[1] * o},
                     f"{door['id']} moved {o:.2f} m out to the wall face of the aerial footprint")
     return None, door["id"]
+
+
+def _door_pref(door, key):
+    """Which doors a vehicle prefers: a semi unloads at a dock-high door (a drive-in door at grade means a forklift
+    has to reach up into the trailer, so it is the fallback); box trucks and vans use drive-in (grade) doors as well."""
+    kind = door.get("kind") or "unknown"
+    if key == "semi_53":
+        return 1 if kind == "drive_in" else 0
+    return 0
+
+
+def _door_fits(door, key):
+    """The vehicle must pass under the door when the door's height is known (unknown height: allowed, stated)."""
+    h = door.get("height_ft")
+    if not h:
+        return True
+    from proinspect.library import equipment
+    dims = (equipment().get(key) or {}).get("dims_ft") or {}
+    vh = dims.get("height") or dims.get("height_mast_lowered")
+    return not vh or door.get("kind") != "drive_in" or h >= vh + 0.5
 
 
 def door_options(scene, door, key):
@@ -1268,8 +1289,8 @@ def maneuver(req, scene=None, internal=False):
         a = arrivals[ti]
         # rank doors: not used by an earlier truck first, then nearest the gate; build legs lazily
         used = {p["opt"]["door"]["id"] for p in plans if p.get("opt")}
-        order = sorted((d for d in doors if door_res[(d["id"], key)]["sides"]),
-                       key=lambda d: (d["id"] in used, math.hypot(d["x"] - gx, d["y"] - gy)))
+        order = sorted((d for d in doors if door_res[(d["id"], key)]["sides"] and _door_fits(d, key)),
+                       key=lambda d: (_door_pref(d, key), d["id"] in used, math.hypot(d["x"] - gx, d["y"] - gy)))
         cands, n_doors, n_fail = [], 0, 0
         for d in order:
             new = (d["id"], key) not in door_opts

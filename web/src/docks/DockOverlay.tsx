@@ -4,12 +4,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Check, Loader2, PencilRuler, X } from 'lucide-react'
-import { PathLayer, PolygonLayer, ScatterplotLayer } from '@deck.gl/layers'
+import { PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { create } from 'zustand'
 import { useStore } from '../lib/store'
 import { mapApi } from '../lib/mapApi'
 import {
-  docksApi, enuToLonLat, KIND_LABEL, proofApi, proofImageUrl, setDoorStatus, STATUS_LABEL,
+  type DoorKind, docksApi, enuToLonLat, KIND_LABEL, proofApi, proofImageUrl, reviewDoor, STATUS_LABEL,
   type DockDoor, type DockStore, type ProofIndex,
 } from '../lib/docksApi'
 import { dashed } from '../yard/SiteMap'
@@ -89,6 +89,15 @@ export function useDockLayers(selectedId: number | null) {
         onClick: (i: { object?: DockDoor }) => { if (!i.object) return false; lastDockClick = Date.now(); useDockOverlay.getState().setPopup({ pid: store.property_id, doorId: i.object.id }); return true },
         onHover: (i: { object?: DockDoor }) => { const c = mapApi.get()?.getCanvas(); if (c && i.object) c.style.cursor = 'pointer' },
       }),
+      // door labels (S1, S2 ... left to right seen from outside): the same labels as inside the 3D scan
+      new TextLayer({
+        id: 'dko-labels', data: doors, getPosition: (d: DockDoor) => {
+          const [x, y] = [d.x + d.normal[0] * 6, d.y + d.normal[1] * 6]
+          return enuToLonLat(store.frame, x, y)
+        },
+        getText: (d: DockDoor) => d.label ?? d.id, getSize: 11, getColor: [232, 236, 242, 255], background: true,
+        getBackgroundColor: [10, 13, 18, 200], backgroundPadding: [3, 1], fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+      }),
       store.gate ? new ScatterplotLayer({
         id: 'dko-gate', data: [store.gate], getPosition: (g: { lon: number; lat: number }) => [g.lon, g.lat], radiusUnits: 'pixels', getRadius: 6,
         stroked: true, lineWidthUnits: 'pixels', getLineWidth: 2, getFillColor: [10, 13, 18, 230], getLineColor: [226, 232, 240, 255],
@@ -113,17 +122,26 @@ export function DockLegend() {
   const conf = doors.filter((d) => d.status === 'confirmed' || d.status === 'user_added').length
   const cs = store.summary?.costar_docks
   return (
-    <div className="glass pointer-events-auto absolute left-[392px] top-[132px] z-[12] flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] text-ink-2 fade-up" data-testid="dock-legend">
+    <div className="pointer-events-none absolute bottom-[200px] left-4 z-[12]" style={{ transform: 'translate(var(--strip-dx, 0px), var(--strip-dy, 0px))' }}>
+    <div className="glass pointer-events-auto flex items-center gap-2 rounded-xl px-3 py-1.5 text-[12px] text-ink-2 fade-up" data-testid="dock-legend">
       <span className="font-semibold text-ink">Docks:</span>
-      <span><b className="font-semibold tabular-nums text-ink">{seen}</b> seen in Vexcel obliques (SAM3)</span>
+      <span title="Doors detected on Vexcel oblique aerials (SAM3)"><b className="font-semibold tabular-nums text-ink">{seen}</b> seen on aerials</span>
       {trailers > 0 && <span>· <b className="tabular-nums text-ink">{trailers}</b> from docked trailers</span>}
       <span>· <b className="tabular-nums text-ink">{inferred}</b> inferred</span>
       {conf > 0 && <span className="text-good">· {conf} confirmed</span>}
       <span>· CoStar <b className="tabular-nums text-ink">{cs ?? '?'}</b></span>
       <button onClick={() => useStore.setState({ docksOpen: store.property_id })} className="ml-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-accent ring-1 ring-inset ring-accent/30 hover:bg-accent/10">Edit</button>
     </div>
+    </div>
   )
 }
+
+const DOOR_TYPES: { kind: DoorKind; label: string; sub: string; hint: string }[] = [
+  { kind: 'dock_high', label: 'Dock-high', sub: 'trailer level', hint: 'Raised loading dock: a trailer backs up to it (about 4 ft above the yard)' },
+  { kind: 'drive_in', label: 'Drive-in', sub: 'grade level', hint: 'Ground-level door a truck or forklift drives through' },
+  { kind: 'unknown', label: 'Door', sub: 'type unsure', hint: 'It is a door, but the type is not clear from the image' },
+]
+const REJECT_REASONS = ['Window', 'Wall / vent', 'Duplicate', 'Other building']
 
 /** Proof popup glued to the clicked door. */
 export function DockProofPopup() {
@@ -164,10 +182,10 @@ export function DockProofPopup() {
 
   if (!popup || !door || !store || docksOpen != null) return null
   const pr = proof?.doors[door.id]
-  const act = async (status: 'confirmed' | 'rejected') => {
+  const act = async (status: 'confirmed' | 'rejected', kind?: DoorKind, reason?: string) => {
     useDockOverlay.setState({ busy: true, error: null })
     try {
-      const s = await setDoorStatus(store.property_id, door.id, status)
+      const s = await reviewDoor(store.property_id, door.id, { status, kind, reason })
       const ed = useDockEd.getState()
       if (ed.pid === store.property_id && !ed.dirty) useDockEd.setState({ pid: null, base: null })   // editor reloads the saved store
       useDockOverlay.setState({ store: s, busy: false, popup: status === 'rejected' ? null : popup })
@@ -181,9 +199,9 @@ export function DockProofPopup() {
       <div className="glass fade-up overflow-hidden rounded-xl">
         <div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
           <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: `rgb(${(DOOR_KIND_RGB[door.kind] ?? DOOR_KIND_RGB.unknown).join(' ')})` }} />
-          <span className="font-mono text-[13px] font-semibold">{door.id}</span>
+          <span className="font-mono text-[13px] font-semibold" title={door.id}>{door.label ?? door.id}</span>
           <span className="text-[12px] text-ink-2">{KIND_LABEL[door.kind]}</span>
-          <span className="rounded bg-white/[0.06] px-1.5 text-[10px] uppercase tracking-wide text-ink-3">{STATUS_LABEL[door.status]}</span>
+          <span className="rounded bg-white/[0.06] px-1.5 text-[11px] uppercase tracking-wide text-ink-3" title={door.reason}>{STATUS_LABEL[door.status]}{door.reason ? ` · ${door.reason}` : ''}</span>
           <button onClick={() => useDockOverlay.getState().setPopup(null)} className="ml-auto rounded p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink" aria-label="Close"><X size={13} /></button>
         </div>
         {!proof ? <div className="skeleton mx-3 h-[120px]" />
@@ -198,22 +216,52 @@ export function DockProofPopup() {
           )}
         <div className="flex flex-wrap gap-1 px-3 pt-2">
           {door.evidence.length ? door.evidence.map((e, i) => (
-            <span key={i} title={e.note} className="inline-flex h-[18px] items-center gap-1 rounded px-1.5 text-[10px] font-medium text-amber-200 ring-1 ring-inset ring-amber-400/25">
+            <span key={i} title={e.note} className="inline-flex h-[18px] items-center gap-1 rounded px-1.5 text-[11px] font-medium text-amber-200 ring-1 ring-inset ring-amber-400/25">
               {EVIDENCE_LABEL[e.type] ?? e.type}<span className="tabular-nums text-ink-3">{Math.round((e.conf ?? 0) * 100)}%</span>
             </span>
           )) : <span className="text-[11px] text-ink-3">No evidence recorded</span>}
-          {conf > 0 && <span className="ml-auto text-[10.5px] tabular-nums text-ink-3">confidence {Math.round(conf * 100)}%</span>}
+          {conf > 0 && <span className="ml-auto text-[11px] tabular-nums text-ink-3">confidence {Math.round(conf * 100)}%</span>}
         </div>
         {error && <div className="mx-3 mt-2 rounded bg-bad/10 px-2 py-1 text-[11px] text-bad">Not saved: {error}</div>}
-        <div className="mt-2.5 flex gap-1.5 border-t border-line p-2">
-          <button disabled={busy || door.status === 'confirmed' || door.status === 'user_added'} onClick={() => act('confirmed')}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12px] font-medium text-good ring-1 ring-inset ring-good/30 hover:bg-good/10 disabled:opacity-40">
-            {busy ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />} Confirm
-          </button>
-          <button disabled={busy} onClick={() => act('rejected')}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12px] font-medium text-bad ring-1 ring-inset ring-bad/30 hover:bg-bad/10 disabled:opacity-40"><X size={13} /> Reject</button>
+        <div className="mt-2.5 space-y-2 border-t border-line p-2.5" data-testid="door-review">
+          <div>
+            <div className="mb-1 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">
+              What is it? {busy && <Loader2 size={11} className="animate-spin" />}
+            </div>
+            <div className="grid grid-cols-3 gap-1.5" role="group" aria-label="Door type">
+              {DOOR_TYPES.map((t) => {
+                const on = door.kind === t.kind && (door.status === 'confirmed' || door.status === 'user_added')
+                return (
+                  <button key={t.kind} disabled={busy} onClick={() => act('confirmed', t.kind)} aria-pressed={on} title={t.hint} data-testid={`door-kind-${t.kind}`}
+                    className={clsx('flex flex-col items-center gap-0.5 rounded-lg px-1 py-1.5 text-[12px] font-medium ring-1 ring-inset transition disabled:opacity-40',
+                      on ? 'bg-good/15 text-good ring-good/40' : 'text-ink ring-line-2 hover:bg-white/[0.06]')}>
+                    <span className="flex items-center gap-1">
+                      <span className="inline-block h-2 w-2 rounded-[2px]" style={{ background: `rgb(${(DOOR_KIND_RGB[t.kind] ?? DOOR_KIND_RGB.unknown).join(' ')})` }} />
+                      {t.label}{on && <Check size={11} />}
+                    </span>
+                    <span className="text-[10.5px] font-normal text-ink-3">{t.sub}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <div>
+            <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Not a door</div>
+            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Reject: why it is not a door">
+              {REJECT_REASONS.map((r) => {
+                const on = door.status === 'rejected' && door.reason === r
+                return (
+                  <button key={r} disabled={busy} onClick={() => act('rejected', undefined, r)} aria-pressed={on} data-testid={`door-reject-${r}`}
+                    className={clsx('flex h-7 items-center gap-1 rounded-full px-2.5 text-[11.5px] ring-1 ring-inset transition disabled:opacity-40',
+                      on ? 'bg-bad/15 text-bad ring-bad/40' : 'text-ink-2 ring-bad/25 hover:bg-bad/10 hover:text-bad')}>
+                    <X size={11} /> {r}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           <button onClick={() => { useDockEd.getState().select(door.id); useStore.setState({ docksOpen: store.property_id }); useDockOverlay.getState().setPopup(null) }}
-            className="flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-[12px] font-medium text-ink ring-1 ring-inset ring-line-2 hover:bg-white/[0.06]"><PencilRuler size={13} /> Edit docks</button>
+            className="flex h-8 w-full items-center justify-center gap-1.5 rounded-lg text-[12px] font-medium text-ink ring-1 ring-inset ring-line-2 hover:bg-white/[0.06]"><PencilRuler size={13} /> Move or add doors in the editor</button>
         </div>
       </div>
       <div data-stem className="mx-auto h-3 w-px bg-accent/80" />
@@ -235,9 +283,9 @@ function ProofImage({ src, crop, fixture }: { src: string; crop: import('../lib/
         )}
         <img src={src} alt={`Vexcel ${crop.view} crop`} onLoad={() => setSt('ok')} onError={() => setSt('err')}
           className={clsx('block max-h-[200px] w-full bg-black object-contain transition-opacity', st === 'ok' ? 'opacity-100' : 'absolute inset-0 h-full opacity-0')} />
-        {fixture && st === 'ok' && <span className="absolute left-1.5 top-1.5 rounded bg-bg/80 px-1.5 text-[10px] text-warn">dev: whole-site oblique, not the crop</span>}
+        {fixture && st === 'ok' && <span className="absolute left-1.5 top-1.5 rounded bg-bg/80 px-1.5 text-[11px] text-warn">dev: whole-site oblique, not the crop</span>}
       </div>
-      <figcaption className="px-2 py-1 text-[10.5px] leading-snug text-ink-3">
+      <figcaption className="px-2 py-1 text-[11px] leading-snug text-ink-3">
         Vexcel oblique · camera looking {crop.camera_dir ?? crop.view.replace('oblique-', '')}{crop.date ? ` · captured ${crop.date}` : ''}
         {nHits != null ? ` · ${nHits} SAM3 box${nHits === 1 ? '' : 'es'}` : ''}{crop.conf != null ? ` · ${crop.conf.toFixed(2)}` : ''}
       </figcaption>

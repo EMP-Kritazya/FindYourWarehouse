@@ -5,10 +5,14 @@ export type DoorKind = 'dock_high' | 'drive_in' | 'unknown'
 export type DoorStatus = 'proposed' | 'inferred' | 'confirmed' | 'rejected' | 'user_added'
 export interface DockEvidence { type: 'oblique' | 'trailer' | 'well' | 'costar_span' | 'vision' | string; conf: number; ref?: string; note?: string }
 export interface DockDoor {
+  /** display label: wall letter + index left to right seen from outside (S1, S2 ...); id stays the edit key */
+  label?: string
   id: string; building: number; edge: number; s_m: number
   x: number; y: number; lon: number; lat: number; normal: [number, number]
   width_ft: number | null; height_ft: number | null
   kind: DoorKind; kind_conf: number; status: DoorStatus; evidence: DockEvidence[]
+  /** a person's reason when they categorised or rejected it */
+  reason?: string
 }
 export interface DockEdge { id: number; a: [number, number]; b: [number, number]; facing: string; len_m: number; normal?: [number, number] }
 export interface DockBuilding { id: number; outline: [number, number][]; edges: DockEdge[] }
@@ -162,6 +166,13 @@ export const proofApi = {
 }
 
 /** Confirm or reject one door from the main-map popup: saves the whole door list through the store API. */
+/** A person's review of one door: its type (confirms it) or why it is not a door (rejects it). */
+export async function reviewDoor(pid: number, doorId: string, patch: { status: 'confirmed' | 'rejected'; kind?: DoorKind; reason?: string }): Promise<DockStore> {
+  const s = await docksApi.get(pid, true)
+  const doors = s.doors.map((d) => (d.id === doorId ? { ...d, ...patch, ...(patch.kind ? { kind_conf: 1 } : {}),
+    ...(patch.status === 'confirmed' && !patch.reason ? { reason: undefined } : {}) } : d))
+  return docksApi.save(pid, { doors, gate: s.gate, registration: s.registration })
+}
 export async function setDoorStatus(pid: number, doorId: string, status: 'confirmed' | 'rejected'): Promise<DockStore> {
   const s = await docksApi.get(pid, true)
   const doors = s.doors.map((d) => (d.id === doorId ? { ...d, status } : d))

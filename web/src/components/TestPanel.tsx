@@ -1,6 +1,6 @@
 import { Suspense, lazy, type ComponentType, type ReactNode } from 'react'
 import clsx from 'clsx'
-import { ArrowLeft, Box, CheckCircle2, Forklift, Map as MapIcon, Truck, XCircle } from 'lucide-react'
+import { ArrowLeft, Box, CheckCircle2, Forklift, Layers3, Map as MapIcon, Truck, XCircle } from 'lucide-react'
 import { useStore, type TestKind } from '../lib/store'
 import { sendEvent } from '../lib/guide'
 import type { Scan } from '../lib/api'
@@ -13,6 +13,7 @@ import { SectionTitle } from './ui'
 // S3 / S4 own these forms. Lazy + boundary so a form in progress never breaks the card.
 // FitForm is resolved with import.meta.glob so the app still builds before S4 creates the file.
 const ManeuverForm = lazy(() => import('../yard/ManeuverPanel'))
+import { InteriorBrief } from '../racks/StorageSummary'
 const ManeuverResultCard = lazy(() => import('../yard/ManeuverPanel').then((m) => ({ default: m.ManeuverResultCard })))
 type FitFormProps = { propertyId: number; modelId?: string; onResult?: (r: any) => void; pickedTarget?: { x: number; z: number } | null; onPickTarget?: () => void }
 const fitMods = import.meta.glob<{ default: ComponentType<FitFormProps> }>('../matterport/FitForm.tsx')
@@ -94,22 +95,35 @@ export default function TestPanel({ id, scan, address }: { id: number; scan: Sca
   if (!kind) {
     return (
       <div className="space-y-3 p-4">
-        <p className="text-[12px] leading-relaxed text-ink-2">Two focused tests on the real building. Pick the question you care about.</p>
+        <p className="text-[12px] leading-relaxed text-ink-2">Two tests on the real building: outside (trucks in the yard) and inside (what fits, and can your forklifts work it).</p>
+        <Choice icon={<Layers3 size={20} />} tone="teal" title="Interior planner" sub="Inside"
+          q="What fits on this floor for MY operation, can my forklifts reach it, and how many do I need?"
+          meta={scan ? 'Layout from your operation on the real scanned floor · forklift reach, trip time and fleet size · keep/remove today\'s contents · live 3D' : 'No Matterport scan large enough to plan on (needs 5,000+ SF of warehouse floor); you can still walk any scan'}
+          disabled={!scan} onClick={() => pick('storage')} />
         <Choice icon={<Truck size={20} />} tone="teal" title="Yard test" sub="Outside"
           q="Can several trucks get in, turn, back in and leave at the same time?"
           meta="Every move planned with truck kinematics on the Vexcel yard · waits and conflicts pinned on the map" onClick={() => pick('yard')} done={!!yardRes} />
-        <Choice icon={<Forklift size={20} />} tone="violet" title="Equipment test" sub="Inside"
-          q="Do my machines fit and move through this building?"
-          meta={scan ? 'Corridors, turns, doors and clear height in the Matterport scan' : 'Needs a Matterport interior scan: none on file'}
-          disabled={!scan} onClick={() => pick('equipment')} done={!!fitRes} />
       </div>
     )
   }
 
   return (
     <div className="p-4">
-      <button onClick={() => pick(null)} className="mb-3 flex items-center gap-1.5 text-[12px] text-ink-3 hover:text-ink"><ArrowLeft size={13} /> Both tests</button>
-      {kind === 'yard' ? (
+      <button onClick={() => pick(null)} className="mb-3 flex items-center gap-1.5 text-[12px] text-ink-3 hover:text-ink"><ArrowLeft size={13} /> All tests</button>
+      {kind === 'storage' || kind === 'equipment' ? (
+        <>
+          <div className="mb-3 flex items-center gap-2"><Layers3 size={16} className="text-accent" /><h3 className="text-[15px] font-semibold">Interior planner</h3><span className="text-[11px] text-ink-3">inside · the real scanned floor</span></div>
+          {scan ? (
+            <>
+              <button data-testid="open-interior" onClick={() => useStore.setState({ interiorOpen: { pid: id, modelId: scan.model_id, title: address } })}
+                className="mb-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-accent text-[13.5px] font-semibold text-bg hover:brightness-110">
+                <Layers3 size={15} /> Open the interior planner (2D plan + live 3D scan)
+              </button>
+              <InteriorBrief id={id} />
+            </>
+          ) : <div className="rounded-xl bg-white/[0.03] p-3 text-[12px] text-ink-3 ring-1 ring-inset ring-line">No interior scan for this property, so nothing can be laid out on a measured floor.</div>}
+        </>
+      ) : kind === 'yard' ? (
         <>
           <div className="mb-3 flex items-center gap-2"><Truck size={16} className="text-accent" /><h3 className="text-[15px] font-semibold">Yard test</h3><span className="text-[11px] text-ink-3">outside</span></div>
           {yardRes && isManeuver(yardRes) && (
@@ -127,26 +141,7 @@ export default function TestPanel({ id, scan, address }: { id: number; scan: Sca
           {yardErr && <div className="mt-2 rounded-lg bg-bad/10 px-2.5 py-1.5 text-[12px] text-bad ring-1 ring-inset ring-bad/25">Could not run the yard test: {yardErr}</div>}
           {yardRes && !isManeuver(yardRes) ? <YardResult r={yardRes} onShow={() => setYard({ propertyId: id, result: yardRes })} shown={!!yard} /> : null}
         </>
-      ) : (
-        <>
-          <div className="mb-3 flex items-center gap-2"><Forklift size={16} className="text-violet-300" /><h3 className="text-[15px] font-semibold">Equipment test</h3><span className="text-[11px] text-ink-3">inside</span></div>
-          {!scan ? <div className="rounded-xl bg-white/[0.03] p-3 text-[12px] text-ink-3 ring-1 ring-inset ring-line">No interior scan for this property, so the equipment test can't run.</div> : (
-            <div className="rounded-xl bg-gradient-to-br from-violet-500/10 to-transparent p-3.5 ring-1 ring-inset ring-violet-400/25">
-              <ol className="list-decimal space-y-1 pl-4 text-[12px] leading-relaxed text-ink-2">
-                <li>Pick your machine (forklift, reach truck, or your own dimensions).</li>
-                <li>Pick a route: from a dock door to a point you click in the scan, or "reach everywhere".</li>
-                <li>Choose the floor as scanned (today's racks and stock) or emptied.</li>
-              </ol>
-              <div className="mt-2 text-[11px] text-ink-3">Checked on the scan's 25 cm grid: corridor width, turning space, door openings, clear height.</div>
-              <button onClick={() => openEquipment(id, scan.model_id, address, fitRes)}
-                className="mt-3 flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-violet-500/25 text-[13px] font-semibold text-violet-50 ring-1 ring-inset ring-violet-300/40 transition hover:bg-violet-500/35">
-                <Box size={15} /> {fitRes ? 'Open the test in the scan' : 'Start in the 3D scan'}
-              </button>
-            </div>
-          )}
-          {fitRes && scan && <FitResult r={fitRes} onShow={() => openEquipment(id, scan.model_id, address, fitRes)} />}
-        </>
-      )}
+      ) : null}
     </div>
   )
 }
@@ -170,8 +165,8 @@ function Choice({ icon, title, sub, q, meta, onClick, disabled, tone, done }: {
         tone === 'teal' ? 'bg-gradient-to-br from-accent/12 to-transparent ring-accent/25 hover:ring-accent/50' : 'bg-gradient-to-br from-violet-500/12 to-transparent ring-violet-400/25 hover:ring-violet-300/50')}>
       <div className={clsx('flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-black/30', tone === 'teal' ? 'text-accent' : 'text-violet-200')}>{icon}</div>
       <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2"><span className="text-[14px] font-semibold">{title}</span><span className="text-[10px] uppercase tracking-[0.08em] text-ink-3">{sub}</span>
-          {done && <span className="ml-auto rounded bg-white/[0.07] px-1.5 text-[10px] text-ink-2">result ready</span>}</div>
+        <div className="flex items-center gap-2"><span className="text-[14px] font-semibold">{title}</span><span className="text-[11px] uppercase tracking-[0.08em] text-ink-3">{sub}</span>
+          {done && <span className="ml-auto rounded bg-white/[0.07] px-1.5 text-[11px] text-ink-2">result ready</span>}</div>
         <div className="mt-0.5 text-[13px] leading-snug text-ink">{q}</div>
         <div className="mt-1 text-[11px] text-ink-3">{meta}</div>
       </div>
@@ -235,9 +230,9 @@ function FitResult({ r, onShow }: { r: Obj; onShow: () => void }) {
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' }) {
   return (
     <div className="rounded-lg bg-white/[0.03] px-2.5 py-2 ring-1 ring-inset ring-line">
-      <div className="text-[10px] text-ink-3">{label}</div>
+      <div className="text-[11px] text-ink-3">{label}</div>
       <div className={clsx('mt-0.5 text-[14px] font-semibold tabular-nums', tone === 'good' && 'text-good', tone === 'bad' && 'text-bad')}>{value}</div>
-      {sub && <div className="text-[10px] text-bad/80">{sub}</div>}
+      {sub && <div className="text-[11px] text-bad/80">{sub}</div>}
     </div>
   )
 }

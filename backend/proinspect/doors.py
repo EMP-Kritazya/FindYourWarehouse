@@ -354,7 +354,8 @@ def from_dock_store(model_id, property_id):
                     "a": pts[0], "b": pts[1], "center": {"x": pts[2]["x"], "z": pts[2]["z"]},
                     "width_m": round(w, 3), "height_m": round(d["height_ft"] * 0.3048, 3) if d.get("height_ft") else None,
                     "sill_m": None, "normal": {"x": round(nX / L, 4), "z": round(nZ / L, 4)},
-                    "source": "dock_store", "status": d.get("status"), "facing": d.get("facing")})
+                    "source": "dock_store", "status": d.get("status"), "facing": d.get("facing"),
+                    "label": d.get("label"), "approx": not reg.get("confirmed_by_user")})
     return out, {"registration": how, "flip": flip, "confidence": reg.get("confidence"),
                  "confirmed_by_user": bool(reg.get("confirmed_by_user")), "in_scan": len(out), "of": len(cand),
                  "updated_at": store.get("updated_at")}
@@ -397,9 +398,122 @@ def scan_outline(model_id, tol=0.5):
     return [[round(x, 2), round(y, 2)] for x, y in poly.exterior.coords]
 
 
+ALIGN_MAX_M = 6.0             # a click further than this along the wall from any aerial door is not "that door"
+
+
+def align_to_click(property_id, model_id, x, z):
+    """One-click along-wall alignment: a person clicked the middle of a REAL dock door in the scan (Showcase x, z).
+    The nearest aerial dock door is moved onto it by sliding the scan registration ALONG that wall (registration.shift,
+    ENU), and the alignment is marked confirmed by a person. Returns {ok, door, moved_m, why}."""
+    from proinspect import docks
+    store = docks.load(property_id)
+    reg = dict(store.get("registration") or {})
+    if reg.get("model_id") != model_id or reg.get("phi") is None:
+        return {"ok": False, "why": "this scan has no registration to the aerial footprint"}
+    _, basis = from_dock_store(model_id, property_id)
+    flip = int(basis.get("flip") or reg.get("flip") or 0)
+    phi, t = (reg["phi_flipped"], reg["t_flipped"]) if flip == 180 and reg.get("t_flipped") else (reg["phi"], reg["t"])
+    shift = list(reg.get("shift") or [0.0, 0.0]) if reg.get("confirmed_by_user") else [0.0, 0.0]
+    G = _grid(model_id)
+    if G is None:
+        return {"ok": False, "why": f"scan {model_id} has no interior twin"}
+    rx, ry = showcase_to_rot(x, z, G["theta"])
+    c, s = math.cos(phi), math.sin(phi)
+    cx, cy = c * rx - s * ry + t[0] + shift[0], s * rx + c * ry + t[1] + shift[1]       # the click in ENU
+    cand = [d for d in store.get("doors") or [] if d.get("status") != "rejected" and d.get("kind") != "personnel"]
+    if not cand:
+        return {"ok": False, "why": "no aerial doors to align"}
+    d = min(cand, key=lambda d: math.hypot(d["x"] - cx, d["y"] - cy))
+    nx, ny = d["normal"][:2]
+    ax, ay = -ny, nx                                               # along the wall
+    off = (d["x"] - cx) * ax + (d["y"] - cy) * ay
+    perp = abs((d["x"] - cx) * nx + (d["y"] - cy) * ny)
+    if perp > 8.0:
+        return {"ok": False, "why": f"that point is {perp:.0f} m from the dock wall: click on a dock door"}
+    if abs(off) > ALIGN_MAX_M:
+        return {"ok": False, "why": f"the nearest aerial door is {abs(off):.1f} m along the wall from your click: "
+                                    "click a dock door nearer the boxes"}
+    shift = [round(shift[0] + ax * off, 2), round(shift[1] + ay * off, 2)]
+    docks.save(property_id, {"doors": store["doors"], "registration": {
+        **reg, "flip": flip, "confirmed_by_user": True, "shift": shift}})
+    return {"ok": True, "door": d.get("label") or d["id"], "door_id": d["id"], "moved_m": round(off, 2),
+            "shift": shift}
+
+
+def _scan_pose(model_id, store):
+    """(phi, t) of the CONFIRMED scan->ENU registration in the dock store (ENU = R(phi) p_rot + t), or None."""
+    reg = (store or {}).get("registration") or {}
+    if reg.get("model_id") != model_id or not reg.get("confirmed_by_user") or reg.get("phi") is None:
+        return None
+    flip = int(reg.get("flip") or 0)
+    phi, t = (reg["phi_flipped"], reg["t_flipped"]) if flip == 180 and reg.get("t_flipped") else (reg["phi"], reg["t"])
+    sh = reg.get("shift") or [0.0, 0.0]
+    return phi, [t[0] + sh[0], t[1] + sh[1]]
+
+
+def sync_marked_to_dock_store(model_id, property_id, snap_m=2.0):
+    """Doors a person marked in the scan -> the aerial dock store (so the map, yard test and rack plan see them).
+    Needs the scan alignment confirmed by a person (else the outside position would be a guess). An aerial door
+    within `snap_m` along the same wall is confirmed and moved onto the marked door; other marked doors are added."""
+    from proinspect import docks
+    store = docks.load(property_id)
+    pose = _scan_pose(model_id, store)
+    marked = [d for d in doors_of(model_id) if d.get("kind") in ("dock_high", "drive_in")]
+    if not marked:
+        return {"synced": 0}
+    if pose is None:
+        return {"synced": 0, "why": "align the doors in the scan first (one click on a real door)"}
+    G = _grid(model_id)
+    phi, t = pose
+    c, s = math.cos(phi), math.sin(phi)
+    eidx = docks.edge_index(store)
+    out = [d for d in store["doors"] if not str(d.get("id", "")).startswith("m-")]
+    added = confirmed = 0
+    for m in marked:
+        rx, ry = showcase_to_rot(m["center"]["x"], m["center"]["z"], G["theta"])
+        ex, ey = c * rx - s * ry + t[0], s * rx + c * ry + t[1]
+        best = None
+        for eid, (bid, e) in eidx.items():
+            ax, ay = e["a"]
+            sv = max(0.0, min(e["len_m"], (ex - ax) * e["t"][0] + (ey - ay) * e["t"][1]))
+            px, py = ax + e["t"][0] * sv, ay + e["t"][1] * sv
+            dist = math.hypot(ex - px, ey - py)
+            if best is None or dist < best[0]:
+                best = (dist, eid, sv, px, py)
+        if best is None or best[0] > 3.0:
+            continue
+        _, eid, sv, px, py = best
+        near = [d for d in out if d.get("edge") == eid and d.get("status") != "rejected"
+                and abs(d.get("s_m", 1e9) - sv) <= snap_m]
+        width_ft = round(m["width_m"] / 0.3048, 1)
+        height_ft = round(m["height_m"] / 0.3048, 1) if m.get("height_m") else None
+        ev = {"type": "user", "conf": 1.0, "ref": f"scan {model_id} door {m['id']}", "note": "marked by a person in the 3D scan"}
+        if near:
+            d = min(near, key=lambda d: abs(d["s_m"] - sv))
+            d.update(x=round(px, 2), y=round(py, 2), s_m=round(sv, 2), status="confirmed", kind=m["kind"],
+                     width_ft=width_ft, height_ft=height_ft or d.get("height_ft"),
+                     evidence=[*(d.get("evidence") or []), ev])
+            confirmed += 1
+        else:
+            out.append({"id": f"m-{m['id']}", "edge": eid, "building": eidx[eid][0], "x": round(px, 2), "y": round(py, 2),
+                        "kind": m["kind"], "status": "user_added", "width_ft": width_ft, "height_ft": height_ft,
+                        "evidence": [ev]})
+            added += 1
+    docks.save(property_id, {"doors": out})
+    return {"synced": confirmed + added, "confirmed": confirmed, "added": added}
+
+
 def doors_for_scan(model_id, property_id):
     """Doors to use inside a scan: the ones a person marked in 3D win; otherwise the aerial dock store's doors mapped
     into the scan (from_dock_store). Returns (doors, basis)."""
+    if property_id is not None:
+        try:
+            from proinspect import docks
+            if _scan_pose(model_id, docks.load(property_id)) is not None:
+                # aligned by a person: aerial + marked doors live together in the dock store (sync_marked_to_dock_store)
+                return from_dock_store(model_id, property_id)
+        except Exception:                                         # noqa: BLE001
+            pass
     marked = doors_of(model_id)
     if marked:
         return marked, {"registration": "marked in the scan", "in_scan": len(marked)}

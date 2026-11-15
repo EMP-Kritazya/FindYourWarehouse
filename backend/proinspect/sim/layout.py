@@ -67,19 +67,28 @@ def putaway_vehicle(fleet):
     return max(cands, key=lambda k: (eq[k]["lift_height_ft"], -eq[k]["min_aisle_ft"])) if cands else None
 
 
-def generate(site: Site, fleet: dict):
+def generate(site: Site, fleet: dict, sprinkler_ft: float = SPRINKLER_FT, dock_zone=True, *, place_mask=None,
+             rack_d=None, bay=None, level_ft=None, aisle_m=None, deep=1, max_levels=None, lanes_on=True):
+    """Optional overrides (all default to selective pallet rack): place_mask = racks only where True (aisles and
+    travel may use the whole floor); rack_d / bay (m) frame depth and bay width; level_ft per level; aisle_m; deep =
+    pallets per bay face in depth (2 = double-deep); max_levels caps levels (shelving); lanes_on = staging lanes."""
+    RACK_D_, BAY_, LEVEL_ = rack_d or RACK_D, bay or BAY, level_ft or PALLET_LEVEL_FT
     eq = equipment()
     pv = putaway_vehicle(fleet)
-    aisle = (eq[pv]["min_aisle_ft"] if pv else 12.0) * FT
+    aisle = aisle_m or (eq[pv]["min_aisle_ft"] if pv else 12.0) * FT
     lift = eq[pv]["lift_height_ft"] if pv else 15
-    levels = max(1, min(int((site.clear_height_ft - SPRINKLER_FT) // PALLET_LEVEL_FT) + 1,
-                        int(lift // PALLET_LEVEL_FT) + 1))
+    levels = max(1, min(int((site.clear_height_ft - sprinkler_ft) // LEVEL_) + 1,
+                        int(lift // LEVEL_) + 1))
+    if max_levels:
+        levels = min(levels, max_levels)
 
     interior = ndimage.binary_fill_holes(site.floor)
     perim = ndimage.binary_erosion(interior, iterations=int(PERIMETER / CELL))
     obstacles = interior & ~site.free
     obst_buf = ndimage.binary_dilation(obstacles, iterations=1)       # 25 cm (>= 15 cm) clearance
     usable = site.free & perim & ~obst_buf
+    if place_mask is not None:
+        usable = usable & place_mask
     open_floor = site.free & interior                                 # aisles may run along walls
 
     # staging lanes, one per door: a full trailer (13 deep) when the building is deep enough, shorter
@@ -89,22 +98,22 @@ def generate(site: Site, fleet: dict):
     lane_cap = 2 * int(lane_d / (48 * 0.0254))
     lanes = []
     y0 = site.wall_y + APRON
-    for k, d in enumerate(site.doors):
+    for k, d in enumerate(site.doors if lanes_on else []):
         x0, x1 = d.x - LANE_W / 2, d.x + LANE_W / 2
         if _all(open_floor, x0, x1, y0, y0 + lane_d):
             lanes.append({"door": k, "x0": x0, "x1": x1, "y0": y0, "y1": y0 + lane_d, "capacity": lane_cap})
-    dock_zone_end = site.wall_y + APRON + lane_d + MAIN_AISLE
+    dock_zone_end = site.wall_y + APRON + lane_d + MAIN_AISLE if dock_zone else PERIMETER
 
     W = site.nx * CELL
     H = site.ny * CELL
-    pitch = aisle + 2 * RACK_D + FLUE
+    pitch = aisle + 2 * RACK_D_ + FLUE
     best = None
     for off in np.arange(0, pitch, CELL):
         bays, blocked_aisles = [], 0
         x_a = PERIMETER + off - pitch                               # first aisle may start before the floor
         while x_a < W:
-            ra = (x_a + aisle, x_a + aisle + RACK_D)
-            rb = (ra[1] + FLUE, ra[1] + FLUE + RACK_D)
+            ra = (x_a + aisle, x_a + aisle + RACK_D_)
+            rb = (ra[1] + FLUE, ra[1] + FLUE + RACK_D_)
             left_aisle = (x_a, x_a + aisle)
             right_aisle = (rb[1], rb[1] + aisle)
             strip = _rect(interior & ~site.free, max(x_a, 0), min(x_a + aisle, W), dock_zone_end, H)
@@ -112,18 +121,18 @@ def generate(site: Site, fleet: dict):
                 blocked_aisles += 1                         # a column / obstacle stands in this aisle
             y = dock_zone_end
             run = 0.0
-            while y + BAY <= H:
+            while y + BAY_ <= H:
                 if run >= CROSS_EVERY:
                     y += max(aisle, 3.6)
                     run = 0.0
                     continue
                 for (rx0, rx1), (ax0, ax1), side in ((ra, left_aisle, -1), (rb, right_aisle, +1)):
-                    if _all(usable, rx0, rx1, y, y + BAY) and _all(open_floor, ax0, ax1, y, y + BAY):
-                        bays.append({"x0": rx0, "x1": rx1, "y0": y, "y1": y + BAY,
+                    if _all(usable, rx0, rx1, y, y + BAY_) and _all(open_floor, ax0, ax1, y, y + BAY_):
+                        bays.append({"x0": rx0, "x1": rx1, "y0": y, "y1": y + BAY_,
                                      "face_x": rx0 if side < 0 else rx1, "aisle_side": side,
                                      "aisle_x": (ax0 + ax1) / 2})
-                y += BAY
-                run += BAY
+                y += BAY_
+                run += BAY_
             x_a += pitch
         score = len(bays) - 25 * blocked_aisles               # columns belong in flues, not aisles
         if best is None or score > best[2]:
@@ -132,7 +141,7 @@ def generate(site: Site, fleet: dict):
     rack = np.zeros_like(site.floor)
     for i, b in enumerate(bays):
         b["id"] = i
-        b["slots"] = 2 * levels
+        b["slots"] = 2 * levels * deep
         r = _rect(rack, b["x0"], b["x1"], b["y0"], b["y1"])
         r[...] = True
     # staging lanes are full of pallets: only their two ends are drivable (flow-through staging: the dock crew works
@@ -168,7 +177,7 @@ def generate(site: Site, fleet: dict):
     lay = Layout(site, aisle, levels, bays, lanes, rack, traversable, dock_zone_end,
                  params={"putaway_vehicle": pv, "aisle_ft": round(aisle / FT, 1), "levels": levels,
                          "rack_depth_in": 42, "bay_ft": 8.25, "pallet_level_ft": PALLET_LEVEL_FT,
-                         "sprinkler_clearance_ft": SPRINKLER_FT, "perimeter_aisle_m": PERIMETER,
+                         "sprinkler_clearance_ft": sprinkler_ft, "perimeter_aisle_m": PERIMETER,
                          "apron_m": APRON, "main_aisle_m": round(MAIN_AISLE, 2), "cross_aisle_every_m": CROSS_EVERY, "offset_m": float(off),
                          "orientation": "racks perpendicular to the dock wall",
                          "aisles_with_columns": blocked_aisles, "bays_dropped_unreachable": dropped})

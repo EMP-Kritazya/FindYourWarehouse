@@ -48,3 +48,16 @@ def test_proof_routes(tmp_path, monkeypatch):
     assert ix["doors"]["k2"]["no_photo"] is True
     assert c.get("/api/docks/1/proof/c1.jpg?door=nope").status_code == 404
     assert c.get("/api/docks/1/proof/bad..name?door=k1").status_code == 422
+
+
+def test_door_review_keeps_type_and_reason(tmp_path, monkeypatch):
+    e = _seed(tmp_path, monkeypatch)
+    r = c.put("/api/warehouses/5/docks", json={"doors": [{"id": "k1", "edge": e["id"], "s_m": 10, "kind": "drive_in",
+                                                           "kind_conf": 1, "status": "confirmed"}]}).json()
+    d = r["doors"][0]
+    assert d["kind"] == "drive_in" and d["status"] == "confirmed" and "reason" not in d
+    assert r["summary"]["drive_in"] == 1 if "drive_in" in r["summary"] else True
+    r = c.put("/api/warehouses/5/docks", json={"doors": [{"id": "k1", "edge": e["id"], "s_m": 10, "kind": "drive_in",
+                                                           "status": "rejected", "reason": "Window"}]}).json()
+    assert r["doors"][0]["status"] == "rejected" and r["doors"][0]["reason"] == "Window"
+    assert c.get("/api/warehouses/5/docks").json()["doors"][0]["reason"] == "Window"

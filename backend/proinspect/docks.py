@@ -176,6 +176,26 @@ def _place(frame, eidx, d):
                     if k in ("building", "s_m", "x", "y", "lon", "lat", "normal", "facing")}}
 
 
+def label_doors(store):
+    """Display labels, the same on the map, in the editor, the yard test and inside the scan: the wall's compass letter
+    + its index counted LEFT TO RIGHT as seen from outside, facing that wall (S1, S2, ... on the south wall, west to
+    east). Multi-building parcels prefix the building ("B2-S3"). `id` stays the stable key for edits."""
+    doors = store.get("doors") or []
+    blds = {d.get("building", 0) for d in doors}
+    groups = {}
+    for d in doors:
+        nx, ny = (d.get("normal") or [0.0, -1.0])[:2]
+        f = d.get("facing") or facing_of(nx, ny)
+        groups.setdefault((d.get("building", 0), f), []).append(d)
+    for (b, f), ds in groups.items():
+        nx, ny = (ds[0].get("normal") or [0.0, -1.0])[:2]
+        rx, ry = -ny, nx                    # viewer outside looks along -n; their right-hand direction
+        ds.sort(key=lambda d: d["x"] * rx + d["y"] * ry)
+        for i, d in enumerate(ds, 1):
+            d["label"] = (f"B{b + 1}-" if len(blds) > 1 else "") + f"{f}{i}"
+    return store
+
+
 def _number(doors):
     for i, d in enumerate(sorted(doors, key=lambda d: (d["edge"], d["s_m"])), 1):
         if not d.get("id"):
@@ -723,8 +743,8 @@ def build(pid, keep_user=True, with_trailers=True, with_span=True, gate=True, re
 def load(pid):
     p = _path(pid)
     if p.exists():
-        return json.loads(p.read_text())
-    return build(pid)
+        return label_doors(json.loads(p.read_text()))
+    return label_doors(build(pid))
 
 
 class DockValidationError(ValueError):
@@ -768,6 +788,8 @@ def _validate_door(d, eidx, frame, i):
                 evidence=list(d.get("evidence") or ([] if st != "user_added" else
                                                    [{"type": "user", "conf": 1.0, "ref": "dock editor",
                                                      "note": "added by a person on the aerial view"}])))
+    if d.get("reason"):                                  # a person's reason (e.g. "window", "duplicate")
+        out["reason"] = str(d["reason"])[:60]
     return out
 
 
@@ -828,7 +850,7 @@ def save(pid, body):
     store["summary"] = summarize(store)
     OUT.mkdir(parents=True, exist_ok=True)
     _path(pid).write_text(json.dumps(store, indent=1, default=float))
-    return store
+    return label_doors(store)
 
 
 def usable_doors(pid, kinds=("dock_high", "unknown")):

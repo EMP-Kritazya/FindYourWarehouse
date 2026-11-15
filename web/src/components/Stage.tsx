@@ -63,7 +63,7 @@ export default function Stage() {
             <h2 className="mt-1 truncate text-[16px] font-semibold">{stage.title}</h2>
             <div className="mt-1 text-[11px] text-ink-3">Matterport scan {stage.modelId}{ready ? '' : ' · loading'}</div>
           </div>
-          <button onClick={() => { setReady(false); openStage(null) }} title="Back to map"
+          <button onClick={() => { setReady(false); openStage(null) }} title="Back to map" aria-label="Back to map"
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-ink hover:bg-white/10"><X size={16} /></button>
         </header>
 
@@ -88,6 +88,17 @@ export default function Stage() {
           {stage.runId && run.loading && <div className="space-y-2"><Skeleton className="h-14" /><Skeleton className="h-10" /><Skeleton className="h-24" /></div>}
           {run.data && <RunDetails run={run.data} scannedSqft={twin.data?.interior?.floor?.indoor_sqft ?? null} rba={detail.data?.rba_sqft ?? null} />}
 
+          {!stage.runId && stage.mode === 'align' && (
+            <div className="space-y-2 text-[12px] leading-relaxed text-ink-2">
+              <SectionTitle>Align the dock doors</SectionTitle>
+              <p>The doors drawn here were found from the air (Vexcel obliques). Their spacing is right, but along the wall they can be ~2 m off.</p>
+              <p><b className="text-ink">Click the middle of one real dock door</b> in the scan: all doors on that wall slide onto the real ones. Labels (S1, S2…) match the map: counted left to right as seen from <i>outside</i>, so inside they read right to left.</p>
+              <button onClick={() => useStore.setState((st) => ({ stage: st.stage ? { ...st.stage, mode: 'markDoors', subtitle: 'Mark missing doors' } : st.stage }))}
+                className="w-full rounded-lg bg-white/[0.05] px-3 py-2 text-left text-[12px] text-ink ring-1 ring-inset ring-line hover:bg-white/[0.08]">
+                Doors the air photo missed? <span className="text-accent">Mark them in the scan →</span>
+              </button>
+            </div>
+          )}
           {!stage.runId && stage.mode === 'markDoors' && (
             <div className="space-y-2 text-[12px] leading-relaxed text-ink-2">
               <SectionTitle>Mark the real doors</SectionTitle>

@@ -135,12 +135,12 @@ export function ManeuverResultCard({ r, shown, onShow, onDocks }: { r: ManeuverR
               <button key={v.id} type="button" onClick={() => { selectTruck(v.id === selTruck ? null : v.id); if (!shown) onShow() }}
                 className={clsx('flex w-full items-start gap-2 rounded-xl p-2.5 text-left transition',
                   v.id === selTruck ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : 'hover:bg-white/[0.04]')}>
-                <span className={clsx('mt-[1px] flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[10px] font-bold',
+                <span className={clsx('mt-[1px] flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-bold',
                   v.status === 'failed' ? 'bg-bad text-bg' : 'bg-warn text-bg')}>{v.status === 'failed' ? '✕' : '!'}</span>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5">
                     <span className="font-mono text-[11.5px] text-ink">{v.id}</span><span className="text-[11px] text-ink-3">{label(v.type)}</span>
-                    {cls && ISSUE_STYLE[cls] && <span className={clsx('ml-auto inline-flex h-[17px] items-center rounded px-1.5 text-[9.5px] font-semibold uppercase tracking-wide ring-1 ring-inset', ISSUE_STYLE[cls].cls)}>{ISSUE_STYLE[cls].label}</span>}
+                    {cls && ISSUE_STYLE[cls] && <span className={clsx('ml-auto inline-flex h-[17px] items-center rounded px-1.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset', ISSUE_STYLE[cls].cls)}>{ISSUE_STYLE[cls].label}</span>}
                   </div>
                   <div className="text-[12px] leading-snug text-ink-2">{text}</div>
                 </div>
@@ -155,7 +155,7 @@ export function ManeuverResultCard({ r, shown, onShow, onDocks }: { r: ManeuverR
           <summary className="flex cursor-pointer list-none items-center gap-1.5 px-2.5 py-2 text-[12px] text-ink-2">
             <ChevronDown size={12} />Door checks ({doorChecks.length})
             <span className="ml-auto flex gap-1">{order.map((c) => [c, doorChecks.filter((x) => x.class === c).length] as const).filter(([, n]) => n).map(([c, n]) => (
-              <span key={c} className={clsx('inline-flex h-[17px] items-center rounded px-1.5 text-[9.5px] font-semibold tabular-nums ring-1 ring-inset', ISSUE_STYLE[c].cls)}>{n} {c}</span>
+              <span key={c} className={clsx('inline-flex h-[17px] items-center rounded px-1.5 text-[11px] font-semibold tabular-nums ring-1 ring-inset', ISSUE_STYLE[c].cls)}>{n} {c}</span>
             ))}</span>
           </summary>
           <div className="space-y-0.5 px-1 pb-1">
@@ -163,7 +163,7 @@ export function ManeuverResultCard({ r, shown, onShow, onDocks }: { r: ManeuverR
               <button key={x.i} type="button" onClick={() => { selectIssue(x.i === selIssue ? null : x.i); if (!shown) onShow() }}
                 className={clsx('flex w-full items-start gap-2 rounded-lg px-2 py-1.5 text-left transition',
                   x.i === selIssue ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : 'hover:bg-white/[0.04]')}>
-                <span className="mt-[1px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full text-[9.5px] font-bold text-bg"
+                <span className="mt-[1px] flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-bg"
                   style={{ background: `rgb(${ISSUE_STYLE[x.class]?.color.join(' ')})` }}>{x.n}</span>
                 <div className="min-w-0 flex-1 text-[11.5px] leading-snug text-ink-2">{x.door && <span className="mr-1 font-mono text-ink">{x.door}</span>}{x.text}</div>
               </button>
@@ -203,9 +203,9 @@ export function ManeuverResultCard({ r, shown, onShow, onDocks }: { r: ManeuverR
 function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: 'good' | 'bad' | 'warn' }) {
   return (
     <div className="rounded-lg bg-white/[0.03] px-2 py-1.5 ring-1 ring-inset ring-line">
-      <div className="text-[10px] text-ink-3">{label}</div>
+      <div className="text-[11px] text-ink-3">{label}</div>
       <div className={clsx('mt-0.5 text-[14px] font-semibold tabular-nums', tone === 'good' && 'text-good', tone === 'bad' && 'text-bad', tone === 'warn' && 'text-warn')}>{value}</div>
-      {sub && <div className="truncate font-mono text-[10px] text-ink-3">{sub}</div>}
+      {sub && <div className="truncate font-mono text-[11px] text-ink-3">{sub}</div>}
     </div>
   )
 }

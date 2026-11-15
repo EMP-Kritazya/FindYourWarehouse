@@ -85,8 +85,9 @@ interface AttrRanking { attr: string; label: string; unit: string; order: 'asc' 
 
 /** CoStar-attribute ranking (CONTRACTS v3 GET /api/rank/attribute): verified (CoStar) first, then imagery estimates,
  *  labelled as such; unknown buildings are counted, never ranked as 0. Metric key: "attr:<attr>". */
-async function rankAttribute(attr: string, market: string, top: number): Promise<Ranking> {
-  const q = new URLSearchParams({ attr, market, top: String(top) })
+async function rankAttribute(spec: string, market: string, top: number): Promise<Ranking> {
+  const [attr, order] = spec.split(':')         // "rba_sqft:asc" = smallest first
+  const q = new URLSearchParams({ attr, market, top: String(top), ...(order ? { order } : {}) })
   const r = await fetch(`/api/rank/attribute?${q}`)
   if (!r.ok) throw new ApiError(r.status, `rank attribute ${r.status}`)
   const d = (await r.json()) as AttrRanking
@@ -99,9 +100,9 @@ async function rankAttribute(attr: string, market: string, top: number): Promise
       return { id: x.id, value: `${v}${d.unit === 'doors' ? ' doors' : ''}`, source: x.source, tag: 'estimate', est: true }
     }),
   ]
-  const label = d.label.replace(/^\w/, (c) => c.toUpperCase())
+  const label = d.label.replace(/^\w/, (c) => c.toUpperCase()) + (d.order === 'asc' ? (/sf|sq/i.test(d.unit) ? ' (smallest first)' : ' (lowest first)') : '')
   return {
-    metric: { key: `attr:${attr}`, label, unit: '', better: d.order === 'asc' ? 'min' : 'max',
+    metric: { key: `attr:${spec}`, label, unit: '', better: d.order === 'asc' ? 'min' : 'max',
       definition: `CoStar value where CoStar has it; otherwise an imagery estimate (dashed tag: a range or lower bound, not a count).` },
     rows, via: 'service',
     note: `${d.coverage.verified} from CoStar · ${d.coverage.estimated} estimated from imagery · ${d.coverage.unknown} unknown (not ranked, never counted as 0).`,

@@ -165,7 +165,7 @@ class Concierge:
         self.evidence: list[str] = []           # tool results + user text, for the number guard
 
     # ---------------------------------------------------------- UI context from the web app
-    def set_context(self, selected_id=None, chips=None):
+    def set_context(self, selected_id=None, chips=None, visible=None, market=None):
         if selected_id is not None:
             self.context["selected_id"] = selected_id
         if chips is not None:

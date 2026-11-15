@@ -17,7 +17,7 @@ export function SourceChip({ source, title }: { source?: string | null; title?: 
   if (!source) return null
   return (
     <span title={title ?? `Source: ${sourceLabel(source)}`}
-      className={clsx('inline-flex h-[18px] items-center rounded px-1.5 text-[10px] font-medium uppercase tracking-wide ring-1 ring-inset',
+      className={clsx('inline-flex h-[18px] items-center rounded px-1.5 text-[11px] font-medium uppercase tracking-wide ring-1 ring-inset',
         SRC_STYLE[source] ?? SRC_STYLE.derived)}>
       {sourceLabel(source)}
     </span>

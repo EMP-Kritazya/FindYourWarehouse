@@ -149,6 +149,13 @@ def build():
         if clear is not None and st.get("ceilingHeightInches"):
             clear = round(clear + st["ceilingHeightInches"] / 12, 1)
         scans = [{"model_id": m, **cov.get(m, {"class": "unknown"})} for m in S.get(pid, [])]
+        # small buildings: a scan covering a good share of the building IS its warehouse floor, even if under 5,000 SF
+        size = r.get("rentableBuildingAreaSquareFeet") or r.get("grossBuildingAreaSquareFeet")
+        for sc in scans:
+            fs, h = sc.get("floor_sqft") or 0, sc.get("height_ft") or 0
+            if sc.get("class") in ("partial", "office_or_small") and size and fs >= 1500 and h >= 16 and fs / size >= 0.25:
+                sc["class"] = "warehouse_floor"
+                sc["why"] = f"covers {100 * fs / size:.0f}% of a {size:,.0f} SF building"
         rank = {"warehouse_floor": 0, "partial": 1, "office_or_small": 2, "unknown": 3, "unavailable": 4}
         scans.sort(key=lambda s: (rank.get(s["class"], 9), -(s.get("floor_sqft") or 0)))
         lst = listings.get(pid, [])

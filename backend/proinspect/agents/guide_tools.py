@@ -203,7 +203,7 @@ def fit_flags(w: dict, prof: dict, vx: Optional[dict]) -> list[str]:
         elif lift and not clear:
             flags.append(f"clear height unknown in CoStar; check the scan for a {e.get('name')}")
         if e.get("min_aisle_ft"):
-            flags.append(f"{e.get('name')} needs about {e['min_aisle_ft']} ft aisles: the equipment test checks it")
+            flags.append(f"{e.get('name')} needs about {e['min_aisle_ft']} ft aisles: the interior planner checks it")
     if w.get("availability") != "available":
         flags.append(f"not actively listed ({w.get('availability')})")
     return flags

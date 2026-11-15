@@ -430,7 +430,7 @@ ATTR_WORDS = [   # vague words -> attribute (longest match first)
     ("lot size", "lot_acres"), ("acre", "lot_acres"), ("land", "lot_acres"),
     ("newest", "year_built"), ("year built", "year_built"), ("oldest", "year_built"),
     ("rent", "asking_rent"), ("cheapest", "asking_rent"), ("price per", "asking_rent"),
-    ("biggest", "rba_sqft"), ("largest", "rba_sqft"), ("square feet", "rba_sqft"), ("size", "rba_sqft"),
+    ("biggest", "rba_sqft"), ("largest", "rba_sqft"), ("smallest", "rba_sqft"), ("tiniest", "rba_sqft"), ("square feet", "rba_sqft"), ("size", "rba_sqft"),
 ]
 
 
@@ -462,7 +462,14 @@ def rank_attribute(attr: str, order: Optional[str] = None, market: Optional[str]
     if not key:
         raise KeyError(f"unknown attribute {attr!r}; supported: {sorted(ATTRS)}")
     label, unit, default = ATTRS[key]
-    order = order if order in ("asc", "desc") else default
+    if order not in ("asc", "desc"):                    # the buyer's words decide the direction when they say it
+        t = str(attr).lower()
+        if re.search(r"\b(smallest|least|fewest|lowest|shortest|cheapest|oldest|narrowest|tiniest|min(imum)?)\b", t):
+            order = "asc"
+        elif re.search(r"\b(biggest|largest|most|highest|tallest|deepest|newest|widest|max(imum)?)\b", t):
+            order = "desc"
+        else:
+            order = default
     mk = _market(market)
     pool = [w for w in _catalog() if (not mk or w.get("market") == mk) and (not ids or w["id"] in set(ids))]
     ver, est, unk = [], [], []

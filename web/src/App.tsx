@@ -3,8 +3,11 @@ import { X } from 'lucide-react'
 import MapView from './components/MapView'
 import { MarketTabs, SearchBar } from './components/TopBar'
 import ResultsRail from './components/ResultsRail'
+import ResultsCarousel from './components/ResultsCarousel'
+import DraggableDock from './components/DraggableDock'
 import WarehouseCard, { bestScan, loadDetail, loadTwin } from './components/WarehouseCard'
 import CompareView from './components/CompareView'
+import CompareDuel from './components/CompareDuel'
 import MapControls from './components/MapControls'
 import Stage from './components/Stage'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -19,6 +22,7 @@ import { isManeuver, trucksFromArgs } from './yard/maneuver'
 const VoiceOrb = lazy(() => import('./voice/VoiceOrb'))
 // S3 owns the 3D yard replay; S5 mounts it over the map.
 const YardView = lazy(() => import('./yard/YardView'))
+const InteriorWorkspace = lazy(() => import('./racks/InteriorWorkspace'))
 // v3: the multi-truck maneuver player (default), and the 2D dock editor (map overlay + right-column panel)
 const ManeuverView = lazy(() => import('./yard/ManeuverView'))
 const DockMap = lazy(() => import('./docks/DockMap'))
@@ -56,6 +60,17 @@ export function useUiCommands() {
         markAgent('openCard', id)
         s.select(id, { tab: a.tab === 'test' ? 'test' : 'overview' })
         break
+      case 'results': {
+        const ids = toIds(a.ids).filter((i) => s.pinsById.has(i))
+        if (ids.length) useStore.setState({ curated: { title: String(a.title ?? 'Results'), ids: ids.slice(0, 10), values: a.values ?? undefined }, ranking: null })
+        break
+      }
+      case 'closeCompare':
+        s.showCompare(false)
+        break
+      case 'profile':
+        if (a.profile && typeof a.profile === 'object') useStore.setState({ buyerProfile: a.profile })
+        break
       case 'compare': {
         const ids = toIds(a.ids ?? (a.from === 'shortlist' ? s.shortlist : undefined))
         s.setCompare(ids.length ? ids : s.shortlist, typeof a.profile === 'string' ? a.profile : undefined)
@@ -85,6 +100,13 @@ export function useUiCommands() {
         run?.then(() => markAgent('testResult', id)).catch(() => console.warn('[ProInspect] yard test failed'))
         break
       }
+      case 'storageTest': {
+        if (!Number.isFinite(id)) break
+        markAgent('openCard', id)
+        s.openTest(id, 'storage')
+        scanFor(id).then(({ w, scan }) => { if (scan) useStore.setState({ interiorOpen: { pid: id, modelId: scan.model_id, title: w.address } }) }).catch(() => {})
+        break
+      }
       case 'showDocks': {
         if (!Number.isFinite(id)) break
         markAgent('openCard', id)
@@ -94,17 +116,10 @@ export function useUiCommands() {
         break
       }
       case 'equipmentTest': {
+        // the equipment checks live in the interior planner now (forklift reach, trips, fleet size on a real layout)
         markAgent('openCard', id)
-        s.openTest(id, 'equipment')
-        if (!a.equipment && !a.run_id) break
-        scanFor(id).then(async ({ w, scan }) => {
-          if (!scan) return
-          const r = a.run_id ? await fetch(`/api/fit/${encodeURIComponent(a.run_id)}`).then((x) => (x.ok ? x.json() : Promise.reject(x.status)))
-            : await api2.fitTest({ property_id: id, model_id: scan.model_id, equipment: a.equipment, route: a.route ?? { to: 'auto' }, floor: a.floor ?? 'as_scanned' })
-          markAgent('testResult', id)
-          markAgent('openScan', id)
-          recordFit(id, scan.model_id, w.address, r)
-        }).catch(() => console.warn('[ProInspect] equipment test failed'))
+        s.openTest(id, 'storage')
+        scanFor(id).then(({ w, scan }) => { if (scan) useStore.setState({ interiorOpen: { pid: id, modelId: scan.model_id, title: w.address } }) }).catch(() => {})
         break
       }
       case 'showPlace': {
@@ -119,7 +134,7 @@ export function useUiCommands() {
         if (a.metric) s.rankBy(String(a.metric), normMarket(a.market))
         break
       case 'rankAttribute':
-        if (a.attr) s.rankBy(`attr:${String(a.attr)}`, normMarket(a.market))
+        if (a.attr) s.rankBy(`attr:${String(a.attr)}${a.order === 'asc' || a.order === 'desc' ? `:${a.order}` : ''}`, normMarket(a.market))
         break
       case 'showAerial':
         markAgent('openAerial', id)
@@ -146,10 +161,15 @@ export default function App() {
   const loadPins = useStore((s) => s.loadPins)
   const selectedId = useStore((s) => s.selectedId)
   const chips = useStore((s) => s.search?.chips)
+  const visibleIds = useStore((s) => s.visibleIds)
+  const market = useStore((s) => s.market)
   const stage = useStore((s) => s.stage)
   const yard = useStore((s) => s.yard)
   const setYard = useStore((s) => s.setYard)
   const docksOpen = useStore((s) => s.docksOpen)
+  const interiorOpen = useStore((s) => s.interiorOpen)
+  const listOpen = useStore((s) => s.listOpen)
+  useEffect(() => { mapApi.setPadding({ left: listOpen ? 380 : 40, bottom: listOpen ? 110 : 190 }) }, [listOpen])
   const closeDocks = useCallback(() => useStore.setState({ docksOpen: null }), [])
   const onUi = useUiCommands()
 
@@ -167,7 +187,7 @@ export default function App() {
     if (stage) sendEvent('openScan', { id: stage.propertyId, model_id: stage.modelId, mode: stage.mode ?? 'view', title: stage.title })
   }, [stage?.modelId, stage?.mode])
   // interaction lock: while the dock editor or the yard view covers the map, the main map can't rotate, pan or zoom
-  useEffect(() => { mapApi.setLocked(docksOpen != null || !!yard) }, [docksOpen, yard])
+  useEffect(() => { mapApi.setLocked(docksOpen != null || !!yard || !!interiorOpen) }, [docksOpen, yard, interiorOpen])
   // fly onto the parcel when a yard replay starts
   useEffect(() => {
     if (!yard) return
@@ -200,12 +220,15 @@ export default function App() {
     ? { right: 32, bottom: 34, width: 380, transform: 'translateZ(0)' }
     : yard || docksOpen != null
       ? { left: 16, bottom: 96, width: 380, transform: 'scale(0.905)', transformOrigin: 'bottom left' }
-      : { left: mapCentre, bottom: 20, width: 380, transform: 'translateX(-50%)', transition: 'left 260ms cubic-bezier(.2,.8,.2,1)' }
+      : listOpen
+        ? { left: mapCentre, bottom: 20, width: 380, transform: 'translateX(-50%)', transition: 'left 260ms cubic-bezier(.2,.8,.2,1)' }
+        : { right: selectedId != null ? 436 : 16, bottom: 158, width: 380, display: 'flex', justifyContent: 'flex-end', transition: 'right 260ms cubic-bezier(.2,.8,.2,1)' }
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-bg">
       <MapView />
-      <ResultsRail />
+      {listOpen ? <ResultsRail /> : <ResultsCarousel />}
+      <Brand />
       <MapControls />
 
       <div className="pointer-events-none absolute inset-x-0 top-4 z-20 flex flex-col items-center gap-3">
@@ -215,7 +238,7 @@ export default function App() {
 
       {docksOpen != null && (
         <div className="pi-docks glass fade-up absolute bottom-4 left-[376px] top-[132px] z-[15] overflow-hidden rounded-2xl" style={{ right: 464 }}>
-          <button onClick={closeDocks} title="Close the dock review (Esc)"
+          <button onClick={closeDocks} title="Close the dock review (Esc)" aria-label="Close the dock review (Esc)"
             className="glass absolute left-3 top-3 z-20 flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-ink hover:text-accent">
             <X size={14} /> Close dock review
           </button>
@@ -231,7 +254,7 @@ export default function App() {
         // the card's Test tab shows the same verdicts.
         <div className="pi-yard glass fade-up absolute bottom-4 left-[376px] top-[132px] z-[15] overflow-hidden rounded-2xl"
           style={{ right: selectedId ? 464 : 16 }}>
-          <button onClick={() => setYard(null)} title="Close the yard replay (Esc)"
+          <button onClick={() => setYard(null)} title="Close the yard replay (Esc)" aria-label="Close the yard replay (Esc)"
             className="glass absolute left-3 top-3 z-20 flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] text-ink hover:text-accent">
             <X size={14} /> Close yard replay
           </button>
@@ -251,15 +274,21 @@ export default function App() {
         </ErrorBoundary>
       ) : <WarehouseCard key={selectedId ?? 'none'} />}
       <CompareView />
+      <CompareDuel />
       <Stage />
+      {interiorOpen && (
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}><InteriorWorkspace open={interiorOpen} onClose={() => useStore.setState({ interiorOpen: null })} /></Suspense>
+        </ErrorBoundary>
+      )}
 
-      <div className="absolute z-50 flex items-end justify-center" style={orbBox}>
+      <DraggableDock defaultStyle={orbBox} hidden={!!interiorOpen}>
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
-            <VoiceOrb inline onUi={onUi} context={{ selectedId: selectedId ?? undefined, chips }} />
+            <VoiceOrb inline onUi={onUi} context={{ selectedId: selectedId ?? undefined, chips, visible: visibleIds, market }} />
           </Suspense>
         </ErrorBoundary>
-      </div>
+      </DraggableDock>
     </div>
   )
 }
@@ -269,5 +298,27 @@ function YardFallback({ onClose }: { onClose: () => void }) {
     <div className="glass pointer-events-auto absolute left-[376px] top-[132px] flex items-center gap-2 rounded-xl px-3 py-2 text-[12px] text-ink-2">
       The yard replay could not be shown. <button onClick={onClose} className="rounded p-0.5 hover:bg-white/10"><X size={13} /></button>
     </div>
+  )
+}
+
+/** The product mark, top-left (the full list used to carry it). */
+function Brand() {
+  const ranked = useStore((s) => s.search?.mode === 'ranked' || !!s.ranking)
+  const listOpen = useStore((s) => s.listOpen)
+  const dot = (c: string) => <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: c }} />
+  return (
+    <>
+      <div className="glass pointer-events-none absolute left-4 top-4 z-20 flex h-11 items-center gap-2 rounded-xl px-3">
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-[13px] font-bold text-accent">P</span>
+        <span className="text-[15px] font-semibold tracking-tight">ProInspect</span>
+      </div>
+      {/* marker legend: colour = availability (or rank when results are ranked), ring = 3D scan, size = building size */}
+      <div className={`glass pointer-events-none absolute left-4 z-10 flex h-9 items-center gap-3 rounded-xl px-3 text-[11.5px] text-ink-2 ${listOpen ? 'hidden' : 'bottom-[156px]'}`} style={{ transform: 'translate(var(--strip-dx, 0px), var(--strip-dy, 0px))' }} data-testid="map-legend">
+        {ranked ? <><span className="flex items-center gap-1.5">{dot('#4fd1c5')} Top 5</span><span className="flex items-center gap-1.5">{dot('#389691')} Match</span></>
+          : <><span className="flex items-center gap-1.5">{dot('#4fd1c5')} Available</span><span className="flex items-center gap-1.5">{dot('#94a3b8')} Not listed</span><span className="flex items-center gap-1.5">{dot('#64748b')} Off market</span></>}
+        <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-full ring-2 ring-white/90" /> 3D scan</span>
+        <span className="text-ink-3">size = building SF</span>
+      </div>
+    </>
   )
 }

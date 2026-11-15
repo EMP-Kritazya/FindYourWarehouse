@@ -3,8 +3,9 @@
 client -> server
   {type:"text", text, speak?=true}         typed turn (speak=false: no TTS audio)
   {type:"audio_start"}  <binary PCM16 mono 16 kHz frames>  {type:"audio_end"}     push-to-talk turn
-  {type:"barge_in"}                         stop the current reply (agent stream + TTS)
-  {type:"context", selected_id?, chips?}    what the user is looking at
+  {type:"barge_in"}                         stop the current reply (agent stream + TTS); quiets unprompted speech 5 min
+  {type:"voice", on}                        the user's voice switch: off = replies are text only
+  {type:"context", selected_id?, chips?, visible?}  what the user is looking at (visible = strip ids in order)
   {type:"event", name, data}                the user clicked: openCard | searchResults | openScan | openAerial |
                                             testResult -> the guide comments proactively (once per event, only
                                             when it isn't already talking)
@@ -45,6 +46,10 @@ def make_concierge():
     return Concierge() if os.environ.get("PROINSPECT_GUIDE") == "v1" else Guide()
 
 
+VOICE_WINDOW_S = 120.0
+QUIET_AFTER_STOP_S = 300.0
+
+
 def make_speaker(send_json, send_bytes):
     return Speaker(send_json, send_bytes) if os.environ.get("ELEVEN_LABS_API_KEY") else None
 
@@ -63,7 +68,10 @@ class Session:
         self.stt: RealtimeSTT | None = None
         self.stt_task: asyncio.Task | None = None
         self.closed = False
-        self.speak_pref = True
+        self.speak_pref = False          # nothing is spoken until the user speaks to the guide
+        self.voice_at: float | None = None   # when the user last spoke (push-to-talk)
+        self.voice_on = True             # the user's voice switch (client {type:"voice", on}); off = text only
+        self.quiet_until = 0.0           # after the user stops a reply, no unprompted speech for QUIET_AFTER_STOP_S
 
     async def send_json(self, msg: dict):
         if self.closed:
@@ -98,6 +106,7 @@ class Session:
 
     # ---------------------------------------------------------- one turn
     def start_turn(self, text: str, speak: bool = True, t0: float | None = None, stt_s: float | None = None):
+        self.c.speaking = bool(speak)          # typed, silent turns get no "One moment." filler in the text
         self.turn_task = asyncio.create_task(self._turn(lambda emit: self.c.turn(text, emit), speak,
                                                         t0 or time.monotonic(), stt_s))
 
@@ -114,7 +123,11 @@ class Session:
             if pid is not None:
                 self.c.set_context(pid, None)
             return
-        self.turn_task = asyncio.create_task(self._turn(lambda emit: ev(name, data or {}, emit), self.speak_pref,
+        # unprompted speech: only the first look at a building (the guide skips repeat opens), only with the voice
+        # switch on, and never within QUIET_AFTER_STOP_S of the user stopping a reply. Test results stay text.
+        speak = self.voice_on and name == "openCard" and time.monotonic() >= self.quiet_until
+        self.c.speaking = speak
+        self.turn_task = asyncio.create_task(self._turn(lambda emit: ev(name, data or {}, emit), speak,
                                                         time.monotonic(), None, kind="event"))
 
     async def _turn(self, run, speak, t0, stt_s, kind="turn"):
@@ -192,7 +205,8 @@ class Session:
         await self.send_json({"type": "transcript", "text": text, "final": True})
         if text:
             await self.stop_reply()
-            self.start_turn(text, True, t0, round(time.monotonic() - t0, 3))
+            self.voice_at = time.monotonic()
+            self.start_turn(text, self.voice_on, t0, round(time.monotonic() - t0, 3))
 
     # ---------------------------------------------------------- main loop
     async def run(self):
@@ -215,16 +229,22 @@ class Session:
                     text = (m.get("text") or "").strip()
                     if text:
                         await self.stop_reply()
-                        self.speak_pref = m.get("speak", True) is not False
+                        self.speak_pref = self.voice_on and m.get("speak", True) is not False
                         self.start_turn(text, self.speak_pref)
                 elif t == "audio_start":
                     await self.audio_start()
                 elif t == "audio_end":
                     self.stt_task = asyncio.create_task(self.audio_end())
                 elif t == "barge_in":
+                    if self.speaker is not None or (self.turn_task and not self.turn_task.done()):
+                        self.quiet_until = time.monotonic() + QUIET_AFTER_STOP_S   # "stop" means stop, for a while
                     await self.stop_reply()
+                elif t == "voice":
+                    self.voice_on = bool(m.get("on", True))
+                    if not self.voice_on:
+                        await self.stop_reply()
                 elif t == "context":
-                    self.c.set_context(m.get("selected_id"), m.get("chips"))
+                    self.c.set_context(m.get("selected_id"), m.get("chips"), m.get("visible"), m.get("market"))
                 elif t == "event":
                     if m.get("name"):
                         self.start_event(str(m["name"]), m.get("data") or {})

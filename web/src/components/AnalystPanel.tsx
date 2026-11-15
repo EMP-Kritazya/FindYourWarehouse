@@ -62,7 +62,7 @@ export default function AnalystPanel({ thread, status, error, chips, connected, 
   hint: string
   muted: boolean
   onMute: () => void
-  onSend: (text: string) => void
+  onSend: (text: string, quiet?: boolean) => void
   onClose: () => void
 }) {
   const [draft, setDraft] = useState('')
@@ -97,7 +97,7 @@ export default function AnalystPanel({ thread, status, error, chips, connected, 
         </div>
       </div>
 
-      <div ref={scroller} className="scroll-thin max-h-[min(46vh,380px)] space-y-2.5 overflow-y-auto px-3 py-2.5">
+      <div ref={scroller} className="scroll-thin max-h-[min(46vh,380px,var(--dock-room,380px))] space-y-2.5 overflow-y-auto px-3 py-2.5">
         {!thread.length && (
           <div className="text-[12.5px] leading-snug text-ink-3">
             Ask an analysis question: which warehouse has the most loading docks, compare this one for a cross-dock, can 5 trucks use this yard at once.
@@ -112,7 +112,7 @@ export default function AnalystPanel({ thread, status, error, chips, connected, 
       {chips.length > 0 && (
         <div className="flex flex-wrap gap-1.5 px-3 pb-2" aria-label="Suggested next steps">
           {chips.map((c, i) => (
-            <button key={i} type="button" title={c.say} onClick={() => onSend(c.say)}
+            <button key={i} type="button" title={c.say} aria-label={c.say} onClick={() => onSend(c.say, true)}
               className="rounded-full bg-white/[0.05] px-2.5 py-[3px] text-[11.5px] text-ink-2 ring-1 ring-inset ring-line-2 hover:bg-accent/15 hover:text-accent hover:ring-accent/40">
               {c.label}
             </button>
@@ -126,7 +126,7 @@ export default function AnalystPanel({ thread, status, error, chips, connected, 
         <button type="submit" title="Send" aria-label="Send" disabled={!draft.trim()}
           className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent/15 text-accent hover:bg-accent/25 disabled:opacity-40"><Send size={14} /></button>
       </form>
-      <div className="px-3 pb-1.5 text-[10.5px] text-ink-3">{connected ? hint : 'Connecting…'}</div>
+      <div className="px-3 pb-1.5 text-[11px] text-ink-3">{connected ? hint : 'Connecting…'}</div>
     </div>
   )
 }
@@ -161,15 +161,15 @@ function AgentMsg({ m, live, status }: { m: ThreadMsg; live: boolean; status: st
       {ids.length > 0 && !m.pending && (
         <div className="mt-1.5 flex flex-wrap gap-1" aria-label="Evidence">
           {ids.map((i) => (
-            <button key={i} onClick={() => select(i)} title="Open the card"
-              className="max-w-[170px] truncate rounded-md bg-panel-3 px-1.5 py-[1px] text-[10.5px] text-ink-2 ring-1 ring-inset ring-line hover:text-accent hover:ring-accent/40">
+            <button key={i} onClick={() => select(i)} title="Open the card" aria-label="Open the card"
+              className="max-w-[170px] truncate rounded-md bg-panel-3 px-1.5 py-[1px] text-[11px] text-ink-2 ring-1 ring-inset ring-line hover:text-accent hover:ring-accent/40">
               {pins.get(i)?.address ?? i}
             </button>
           ))}
         </div>
       )}
       {m.unverified && m.unverified.length > 0 && (
-        <div className="mt-1 flex items-center gap-1 text-[10.5px] text-warn" title="These numbers were not returned by any tool in this conversation">
+        <div className="mt-1 flex items-center gap-1 text-[11px] text-warn" title="These numbers were not returned by any tool in this conversation">
           <AlertTriangle size={11} /> unverified: {m.unverified.join(', ')}
         </div>
       )}

@@ -437,3 +437,124 @@ vegetation attributes, roadway intelligence, semantic embeddings.
   - **Main map:** a 3D site from the Vexcel nDSM plus ortho (`api_terrain.py`, deck.gl `TerrainLayer`), with docks drawn
     x-ray on top.
   - **Dock editor:** Select / Add / Move-gate tools, and the main map is locked while it is open.
+- **Storage capacity planner (2026-11-15):** `racks.py` + `api_racks.py` (`/api/racks/{pid}`, `/trucks`, `/summary`).
+  - **Layout:** reuses `sim/layout.generate`, now with `sprinkler_ft` and `dock_zone` parameters. Levels = scan P5 − the
+    sprinkler clearance (CoStar ESFR 3 ft, wet 1.5 ft, unknown 3 ft), capped by the truck's lift height. "Parallel"
+    orientation transposes the site.
+  - **Columns:** positions lost to columns = the same layout with the small blocked components removed.
+  - **Dock wall:** from the dock-store doors, using the corrected E/W label mapping (`racks._dock_side`).
+  - **Outputs:** the whole-building estimate is a ratio to CoStar RBA (labelled est.); $/position only when CoStar has
+    a rent.
+  - **3D:** the scene is written to `/media/racks/{key}_scene.json` and rendered by MatterportStage, with replay
+    controls hidden for static scenes.
+  - **UI:** Test tab "Storage capacity" (`web/src/racks/`); `StorageRow` on the card; a Storage section in Compare;
+    the analyst tool `storage_capacity`; UI command `storageTest`.
+  - **12896757:** reach 5,076 / VNA 5,460 / counterbalance 2,082 positions (scanned); 552 lost to columns.
+- **Dock doors in the scan (2026-11-15):**
+  - **Labels:** `docks.label_doors` gives each door a label (S1…, counted left to right as seen from OUTSIDE that wall),
+    used on the map, editor, popup and scan.
+  - **Alignment:** `doors.align_to_click` + `POST /api/warehouses/{id}/docks/align` = one click on a real door slides
+    the aerial doors along the wall (`registration.shift`, confirmed). Scan stage mode `align`; "Align these doors"
+    on the card's Docks row.
+  - **Marked doors:** doors marked in the scan sync to the dock store (`sync_marked_to_dock_store`, after alignment).
+  - **Measured on 12896757:** the rotation is right; the aerial is ±2 m along the wall. SAM3 finds no doors on the west
+    segments (the oblique shows blank wall and tanks there), and the scan covers x −78..+13 of a 126 m facade.
+- **Interior planner (2026-11-15):** `interior.py` + `api_interior.py` (`/api/interior/{pid}`, `/summary`,
+  `/operations`) + `library/layouts.yaml`.
+  - **Recipes:** operation → zones (selective / dense double-deep / shelving / open), measured as depth bands BEHIND
+    the dock zone. A main aisle runs through pick/open zones and a cross aisle between zones.
+  - **Scanned contents:** become objects (keep/remove).
+  - **Forklift proofs:** reachable %, trip m, min/pallet, pallets/h, machines for the profile's volume, from a grid
+    Dijkstra on the floor eroded by the machine's width.
+  - **3D:** realistic instanced racks (`sceneRenderer.rackStructure`), forks lifting via key[5], removed-object
+    outlines.
+  - **UI:** `web/src/racks/InteriorWorkspace.tsx` (2D left, live Matterport right), opened from the Test tab or the
+    `storageTest` command. The card/Compare verdict comes from `/api/interior/{id}/summary`.
+  - **12896757, 3PL:** 5,076 positions, 100% reachable, 1.64 min/pallet, 2 reach trucks for 461 moves/shift.
+- **Two tests only (2026-11-15):**
+  - **Test tab:** Yard test (outside) + Interior planner (inside; it contains the forklift checks). The separate
+    Equipment test and the old storage-capacity numbers are gone from the UI.
+  - **Routing:** the `equipmentTest` UI command opens the planner, and the analyst prompt says so. `fit/` and
+    `racks.py` remain as backend modules.
+  - **Coverage honesty:** `interior.plan` returns `scan_coverage_pct`. Below 30%, the whole-building estimate is
+    flagged unreliable and not shown as a result (e.g. 242089: the scan covers 10%).
+  - **Rack types:** selective, dense (double-deep), shelving, cantilever (lumber, pipe), open.
+  - **Comparison images:** `build/ui/compare_real_vs_racks/`.
+- **UI polish (2026-11-15):**
+  - **Layout:** map full-screen. Results are a bottom strip (`components/ResultsCarousel.tsx`); "Full list" opens the old
+    `ResultsRail` (store `listOpen`). The selected property is a no-scroll panel (`components/PropertyHud.tsx`) with
+    6 tiles, 3 actions and drawers; the full card is the "Evidence & sources" / "Test results" drawer
+    (store `cardDetail`).
+  - **Analyst:** speaks only after the user has used voice (within 2 min). Unprompted remarks come only on test
+    results, or on openCard once the profile is known, at most one per 30 s. They show as a "new note" badge, never
+    auto-opening the panel. Clicking outside or pressing Esc collapses it.
+  - **Skill pick:** `ui-ux-pro-max` (checklist; keep the existing tokens). Not the personal KrX brand.
+- **ui-ux-pro-max pass (2026-11-15, styling and accessibility only, no simulation/API/store changes):**
+  - `--color-ink-3` changed #6b7587 → #8a94a6: it was 3.3–3.9:1, now ≥ 5:1.
+  - Global `:focus-visible` ring, pointer cursor, `prefers-reduced-motion`.
+  - Text floor 11px: 87 sub-11px sizes fixed.
+  - aria-labels on icon-only buttons (from their titles).
+  - Voice orb moved onto the teal palette and made 52px.
+  - Map markers: flat dots (size = building SF or rank, colour = availability, white ring = 3D scan), a name label on
+    hover/selected, and a legend above the strip; the 3D tower bars are gone.
+  - Houston = 95 warehouses: 50 available, 40 not listed, 5 off market; 52 have a usable 3D scan.
+- **Small buildings (2026-11-15):**
+  - A scan counts as warehouse floor if it is ≥ 5,000 SF, OR ≥ 25% of the building with ≥ 1,500 SF and ≥ 16 ft
+    (`catalog.py`). 10 scans on 9 small buildings newly qualify; their interior twins are built.
+  - The dock zone is reserved only when dock doors fall inside the scanned area.
+  - Without doors, forklifts start from the largest open floor.
+  - 10111 Grant Rd: 18 positions, but 0% reachable. The 1,942 SF scanned room splits into 8 pockets for a reach
+    truck, and the existing racks against the walls are kept as structure.
+- **Analyst UX (2026-11-15):**
+  - **Draggable dock** (`components/DraggableDock.tsx`): grip above the analyst; arrow keys or Home; double-click
+    resets; position saved in localStorage `pi.analyst.pos`; the thread height is capped to the room above it
+    (`--dock-room`).
+  - **Answers:** 1–2 sentences / ~35 words with the key number and source; explain how or why only when asked;
+    event remarks are one sentence.
+  - **Lead-in fillers** ("One moment.") only on spoken turns (`guide.speaking`, set per turn by `api_concierge`).
+- **Guided buying flow (2026-11-15):**
+  - **Greeting:** on load the analyst shows "What are we looking for today?" (VoiceOrb `vo-greet`, input + 3 example
+    chips; once per browser session via sessionStorage `pi.greeted`). Text only, never auto-spoken.
+  - **Need → search:** the prompt makes the first need call `update_buyer_profile` + `search_warehouses` in one step,
+    asking at most one question. `update_buyer_profile` emits ui `profile`, and the strip shows it as chips
+    (store `buyerProfile`).
+  - **Strip:** the top 10 when ranked ("Top 10 for you"), numbered. Its order goes to the analyst (store `visibleIds` →
+    ws `context.visible` → `set_context(visible=)` → session note "#1 …"), so "compare the first and second" = strip
+    #1/#2.
+  - **Head to head:** `components/CompareDuel.tsx`, over the map when exactly 2 ids are compared (3–4 still use
+    CompareView).
+    - A balance per criterion from `/api/compare`.
+    - Advantages = criteria won, disadvantages = criteria lost + missed deal-breakers; unknowns are listed separately.
+    - The yard grade and interior reach/min-per-pallet differences count only when both buildings have a result.
+    - It is curated by the buyer profile (ops_text) when no operation key is set.
+  - **Opening and closing:** tick two cards (compare toggle on hover), or say it. ui `closeCompare` closes.
+  - **Verified headless (real Claude):** need → top 10 in ~8 s; "compare the first and second property" opens the
+    duel in 2.8 s with the correct ids; "close the comparison" closes it. No page errors. Shots in
+    `build/ui/v3.1/guided/`.
+- **The strip follows every ask (2026-11-15):**
+  - `rank_attribute` always sends `order`; the web key is `attr:<key>:<asc|desc>`.
+  - "smallest/fewest/oldest…" in the words → asc (`analytics.rank_attribute`).
+  - `closest_to`, `find_comparables` and a ranking `among` a set emit ui `results` {title, ids, values} → store
+    `curated`, shown first by the carousel. A new search or ranking clears it.
+  - Rankings default to the market tab on screen (ws `context.market` → `g.context["market"]`). Before this, an
+    unnamed market ranked both cities while the strip ranked one, so flyTo flipped the market label.
+- **Restart gotcha (2026-11-15):** never run `lsof -ti tcp:8010 | xargs kill`. It also kills the Vite dev server,
+  which holds proxy connections to 8010, so 8080 dies and cards, docks and scans stop loading in an open tab.
+  Kill only the listener: `kill $(lsof -ti tcp:8010 -sTCP:LISTEN)`.
+- **Tests start only when asked (code gate):**
+  - `guide.ASK_YARD` / `ASK_INSIDE` + `_asked()`: `yard_maneuver_test`, ui `yardTest` / `storageTest` /
+    `equipmentTest`, and the planner opening in `storage_capacity` run only when the user's own message in this turn
+    asks for a test (a truck count, "test", "run it", "yes"…). Never from an event or on the agent's initiative.
+  - "Take me to X" → ui openCard.
+- **Declutter + voice control (2026-11-15):**
+  - **Top bar:** the search chips are one scrollable row (fade edge). The dock summary ("Docks: N seen on aerials · …")
+    moved from under the search box to above the map legend.
+  - **Movable strip:** grip in the strip header (drag, arrows, Home / double-click resets; localStorage
+    `pi.strip.pos`). The map legend and dock summary follow it via the CSS vars `--strip-dx` / `--strip-dy`.
+  - **When the analyst speaks:**
+    - only for (a) the FIRST open of each property (repeat opens are silent; any profile, EVENT_GAP_S 8), and
+      (b) questions the user types or speaks;
+    - chips and buttons answer in text; test results are text-only notes.
+  - **Controls beside the orb:** a persistent voice switch (localStorage `pi.voice.off` → ws `{type:"voice", on}`;
+    off = text only, server-enforced) and a Stop button while speaking. A stop (barge_in during a reply) silences
+    unprompted speech for 5 min (`QUIET_AFTER_STOP_S`).

@@ -35,13 +35,13 @@ export default function ShortlistTray() {
           {pins.length > 0 && <ChevronUp size={14} className={clsx('ml-auto text-ink-3 transition', !open && 'rotate-180')} />}
         </button>
         {pendingCompare && (
-          <button onClick={() => showCompare(true)} title="Reopen the comparison you built from the cards"
+          <button onClick={() => showCompare(true)} title="Reopen the comparison you built from the cards" aria-label="Reopen the comparison you built from the cards"
             className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-white/[0.07] px-2 text-[12px] text-ink ring-1 ring-inset ring-line-2 hover:bg-white/10">
             <Columns3 size={13} /> {compareIds.length}
           </button>
         )}
         {pins.length >= 2 && (
-          <button onClick={() => setCompare(ids.slice(0, 4))} title="Compare the shortlist side by side"
+          <button onClick={() => setCompare(ids.slice(0, 4))} title="Compare the shortlist side by side" aria-label="Compare the shortlist side by side"
             className="flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-warn/90 px-2.5 text-[12px] font-semibold text-bg hover:bg-warn">
             <Columns3 size={13} /> Compare
           </button>
@@ -59,10 +59,10 @@ export default function ShortlistTray() {
                   <span className="block text-[11px] text-ink-3">{fmtKSF(p.rba_sqft)} · {p.market}</span>
                 </span>
               </button>
-              <button onClick={() => doIt('remove', p.id)} title="Remove from shortlist" className="rounded p-1 text-ink-3 opacity-0 transition hover:bg-white/10 hover:text-ink group-hover:opacity-100"><X size={12} /></button>
+              <button onClick={() => doIt('remove', p.id)} title="Remove from shortlist" aria-label="Remove from shortlist" className="rounded p-1 text-ink-3 opacity-0 transition hover:bg-white/10 hover:text-ink group-hover:opacity-100"><X size={12} /></button>
             </div>
           ))}
-          {pins.length > 4 && <div className="px-2 text-[10px] text-ink-3">Compare shows the first 4.</div>}
+          {pins.length > 4 && <div className="px-2 text-[11px] text-ink-3">Compare shows the first 4.</div>}
         </div>
       )}
     </section>

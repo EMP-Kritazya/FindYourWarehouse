@@ -1,3 +1,4 @@
+import { Volume2, VolumeX } from 'lucide-react';
 // Voice concierge orb (Stream D). Push-to-talk (hold Space, or click to start/stop), live transcript, streamed
 // assistant text + mp3 audio, text fallback, barge-in on a new press or Esc. Browser APIs only.
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -10,7 +11,7 @@ import { useStore } from '../lib/store';
 
 export type VoiceOrbProps = {
   onUi: (cmd: string, args: any) => void;
-  context?: { selectedId?: number; chips?: any[] };
+  context?: { selectedId?: number; chips?: any[]; visible?: number[]; market?: string };
   /** render in normal flow instead of fixed bottom-right */
   inline?: boolean;
   /** called for every UI event forwarded to the guide (optional; events come from `sendEvent` in ./bus) */
@@ -63,10 +64,16 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
   const [reply, setReply] = useState('');
   const [status, setStatus] = useState('');
   const [error, setError] = useState('');
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(() => { try { return localStorage.getItem('pi.voice.off') === '1' } catch { return false } });
   const mutedRef = useRef(false);
   mutedRef.current = muted;
   const [open, setOpen] = useState(false);
+  const [greet, setGreet] = useState(() => { try { return sessionStorage.getItem('pi.greeted') !== '1' } catch { return true } });
+  const [greetText, setGreetText] = useState('');
+  const dismissGreet = () => { setGreet(false); try { sessionStorage.setItem('pi.greeted', '1') } catch { /* private mode */ } };
+  const [notes, setNotes] = useState(0);                 // unprompted remarks waiting (shown as a badge, never popped open)
+  const userTurn = useRef(false);                         // the current reply answers something the user asked
+  const rootRef = useRef<HTMLDivElement>(null);
   const [latency, setLatency] = useState<string>('');
   const [chips, setChips] = useState<Chip[]>([]);
   const [thread, setThread] = useState<ThreadMsg[]>([]);
@@ -108,7 +115,7 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
   const sendContext = useCallback(() => {
     const c = ctxRef.current;
     if (!c) return;
-    sock.current?.send({ type: 'context', selected_id: c.selectedId ?? null, chips: c.chips ?? null });
+    sock.current?.send({ type: 'context', selected_id: c.selectedId ?? null, chips: c.chips ?? null, visible: c.visible ?? [], market: c.market ?? null });
   }, []);
 
   // ---------------------------------------------------------------- socket + player lifecycle
@@ -121,7 +128,7 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
     const s = new ConciergeSocket();
     sock.current = s;
     s.onStatus = setConnected;
-    s.onOpen = () => { sendContext(); flushEvents(); };
+    s.onOpen = () => { s.send({ type: 'voice', on: !mutedRef.current }); sendContext(); flushEvents(); };
     const detach = attachSink((e) => {
       const ok = s.send({ type: 'event', name: e.name, data: e.data ?? {} });
       if (ok) { try { onEventRef.current?.(e); } catch { /* ignore */ } }
@@ -135,7 +142,7 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
           setUserFinal(m.final);
           if (m.text) pushUser(m.text, !m.final);
           if (m.final) {
-            if (m.text) { setReply(''); replyDone.current = false; set('thinking'); startAgent(); }
+            if (m.text) { setReply(''); replyDone.current = false; userTurn.current = true; setOpen(true); set('thinking'); startAgent(); }
             else { setStatus("Didn't catch that"); set('idle'); }
           }
           break;
@@ -143,7 +150,7 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
           if (replyDone.current) {          // a proactive comment (UI event) starts a fresh reply
             replyDone.current = false;
             setReply('');
-            setOpen(true);
+            userTurn.current = false;
             startAgent('event');
             if (stateRef.current === 'idle') set('thinking');
           }
@@ -163,7 +170,8 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
           }
           setStatus('');
           replyDone.current = true;
-          setOpen(true);
+          if (userTurn.current) setOpen(true); else setNotes((x) => x + 1);
+          userTurn.current = false;
           if (stateRef.current === 'thinking' && !p.active) set('idle');
           break;
         case 'suggestions':
@@ -215,8 +223,13 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
     return () => { detach(); s.close(); p.stop(); mic.current?.stop(); };
   }, [sendContext, pushUser, startAgent, patchAgent]);
 
-  useEffect(() => { sendContext(); }, [context?.selectedId, JSON.stringify(context?.chips ?? null), sendContext]);
-  useEffect(() => { if (player.current) player.current.audio.muted = muted; }, [muted]);
+  useEffect(() => { sendContext(); }, [context?.selectedId, JSON.stringify(context?.chips ?? null), (context?.visible ?? []).join(','), context?.market, sendContext]);
+  useEffect(() => {
+    if (player.current) player.current.audio.muted = muted;
+    try { localStorage.setItem('pi.voice.off', muted ? '1' : '0') } catch { /* private mode */ }
+    if (muted) { player.current?.stop(); try { window.speechSynthesis?.cancel(); } catch { /* ignore */ } }
+    sock.current?.send({ type: 'voice', on: !muted });
+  }, [muted]);
 
   // ---------------------------------------------------------------- barge-in + push-to-talk
   const bargeIn = useCallback(() => {
@@ -292,7 +305,8 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
     else startTalking();
   };
 
-  const say = (t: string) => {
+  /** quiet = a chip or button: answer in text only. Typed or spoken questions are spoken when voice is on. */
+  const say = (t: string, quiet = false) => {
     bargeIn();
     setError('');
     setUserText(t);
@@ -302,9 +316,12 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
     replyDone.current = false;
     pushUser(t);
     startAgent();
+    dismissGreet();
+    userTurn.current = true;
+    setNotes(0);
     setOpen(true);
     // text-first: typed asks are spoken only once the user has talked to the orb in this session
-    sock.current?.send({ type: 'text', text: t, speak: !muted && usedVoice.current });
+    sock.current?.send({ type: 'text', text: t, speak: !muted && !quiet });
     set('thinking');
   };
 
@@ -317,22 +334,60 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
     return () => window.removeEventListener('proinspect:ask', h);
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const away = (e: PointerEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      if (stateRef.current === 'thinking' || stateRef.current === 'listening') return;
+      setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    window.addEventListener('pointerdown', away, true);
+    window.addEventListener('keydown', esc);
+    return () => { window.removeEventListener('pointerdown', away, true); window.removeEventListener('keydown', esc); };
+  }, [open]);
+
   const hint = state === 'listening' ? 'Release to send' : state === 'speaking' ? 'Press to interrupt'
     : 'Hold Space or click to talk';
   const showPanel = open || !!error;
 
   return (
-    <div className={`vo-root ${inline ? 'vo-inline' : 'vo-fixed'}`}>
+    <div ref={rootRef} className={`vo-root ${inline ? 'vo-inline' : 'vo-fixed'}`}>
       <style>{CSS}</style>
       {showPanel ? (
         <AnalystPanel thread={thread} status={status} error={error} chips={chips} connected={connected}
           hint={`${hint}${latency ? ` · ${latency}` : ''}`} muted={muted} onMute={() => setMuted((x) => !x)}
           onSend={say} onClose={() => { setOpen(false); setUserText(''); setReply(''); setError(''); }} />
+      ) : greet && thread.length === 0 ? (
+        <div className="vo-greet" role="dialog" aria-label="The analyst asks what you are looking for" data-testid="analyst-greeting">
+          <button type="button" className="vo-x" onClick={dismissGreet} aria-label="Dismiss" title="Dismiss">×</button>
+          <div className="vo-greet-h">What are we looking for today?</div>
+          <div className="vo-greet-s">Tell me your operation, size and trucks. Hold Space to talk, or type.</div>
+          <form className="vo-form" onSubmit={(e) => { e.preventDefault(); if (greetText.trim()) { say(greetText.trim()); setGreetText(''); } }}>
+            <input className="vo-input" value={greetText} onChange={(e) => setGreetText(e.target.value)} autoFocus
+              placeholder="e.g. 3PL, 60k SF, 53-ft trailers in Houston" aria-label="What you are looking for" />
+          </form>
+          <div className="vo-chips" style={{ margin: '8px 0 0' }}>
+            {GREET_EXAMPLES.map((x) => <button key={x} type="button" className="vo-chip" onClick={() => say(x, true)}>{x}</button>)}
+          </div>
+        </div>
       ) : (
-        <button type="button" className="vo-pill" onClick={() => setOpen(true)} title="Open the analyst thread">
-          Ask the analyst{thread.length ? ` · ${thread.filter((x) => x.role === 'user').length}` : ''}
+        <button type="button" className="vo-pill" onClick={() => { setOpen(true); setNotes(0); }} title="Open the analyst (or hold Space to talk)" aria-label="Open the analyst (or hold Space to talk)">
+          Ask the analyst
+          {notes > 0 && <span className="vo-badge">{notes} new note{notes > 1 ? 's' : ''}</span>}
         </button>
       )}
+      <div className="vo-ctl">
+        {state === 'speaking' && (
+          <button type="button" className="vo-stop" onClick={bargeIn} title="Stop speaking (Esc)" aria-label="Stop speaking" data-testid="voice-stop">
+            <span className="vo-stop-sq" aria-hidden="true" />Stop
+          </button>
+        )}
+        <button type="button" className="vo-voice" onClick={() => { if (!muted) bargeIn(); setMuted((x) => !x); }} aria-pressed={!muted}
+          title={muted ? 'Voice is off: replies are text only. Click to turn voice on.' : 'Voice is on. Click to turn it off (text only).'}
+          aria-label={muted ? 'Turn voice on' : 'Turn voice off'} data-testid="voice-toggle">
+          {muted ? <VolumeX size={15} aria-hidden="true" /> : <Volume2 size={15} aria-hidden="true" />}
+        </button>
       <button ref={orbRef} className="vo-orb" data-state={state} onClick={onOrbClick}
         aria-label={`Voice concierge: ${state}. ${hint}`} title={connected ? hint : 'Connecting to concierge…'}>
         <span className="vo-core" />
@@ -340,11 +395,33 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
         <span className="vo-ring vo-ring2" />
         {!connected && <span className="vo-off" />}
       </button>
+      </div>
     </div>
   );
 }
 
+const GREET_EXAMPLES = [
+  '3PL pallet storage, about 60k SF, 53-ft trailers, Houston',
+  'Food distribution, tall clear height, Los Angeles',
+  'Last-mile van station with a big yard',
+];
+
 const CSS = `
+.vo-ctl{display:flex;align-items:center;gap:8px}
+.vo-voice,.vo-stop{display:flex;align-items:center;gap:6px;height:32px;border-radius:999px;cursor:pointer;
+  background:color-mix(in oklab,#11151c 88%,transparent);border:1px solid #262d3a;color:#a3adbd;backdrop-filter:blur(14px)}
+.vo-voice{width:32px;justify-content:center}
+.vo-voice[aria-pressed=true]{color:#4fd1c5;border-color:rgba(79,209,197,.45)}
+.vo-voice:hover,.vo-stop:hover{color:#e8eaf0}
+.vo-stop{padding:0 12px;font:600 12px/1 Inter,system-ui,sans-serif;color:#fca5a5;border-color:rgba(248,113,113,.45)}
+.vo-stop-sq{width:9px;height:9px;border-radius:2px;background:currentColor}
+.vo-voice:focus-visible,.vo-stop:focus-visible{outline:2px solid #4fd1c5;outline-offset:2px}
+.vo-greet{position:relative;width:min(360px,calc(100vw - 32px));background:rgba(12,14,20,.86);color:#e8eaf0;
+  border:1px solid rgba(79,209,197,.35);border-radius:16px;padding:14px 14px 12px;backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px);box-shadow:0 12px 40px rgba(0,0,0,.45);animation:vo-pop .32s cubic-bezier(.2,.9,.3,1.2)}
+.vo-greet-h{font-size:15px;font-weight:600;letter-spacing:-.01em;margin-right:18px}
+.vo-greet-s{color:#a3adbd;font-size:12px;margin:2px 0 10px}
+@keyframes vo-pop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
 .vo-root{display:flex;flex-direction:column;align-items:flex-end;gap:12px;font:14px/1.45 Inter,system-ui,sans-serif;
   z-index:50;pointer-events:none}
 .vo-root>*{pointer-events:auto}
@@ -363,24 +440,24 @@ const CSS = `
 .vo-status{display:block;color:#8a90a2;font-size:12px;margin-top:4px;animation:vo-blink 1.2s infinite}
 .vo-err{color:#ff8a8a;font-size:12px;margin-bottom:8px}
 .vo-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
-.vo-chip{background:rgba(124,140,255,.14);border:1px solid rgba(124,140,255,.4);color:#dfe3ff;border-radius:999px;
+.vo-chip{background:rgba(79,209,197,.14);border:1px solid rgba(79,209,197,.4);color:#dfe3ff;border-radius:999px;
   padding:4px 10px;font:12px/1.3 inherit;cursor:pointer}
-.vo-chip:hover{background:rgba(124,140,255,.28)}
+.vo-chip:hover{background:rgba(79,209,197,.28)}
 .vo-form{display:flex;gap:6px}
 .vo-input{flex:1;min-width:0;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;
   color:inherit;padding:8px 10px;font:inherit;outline:none}
-.vo-input:focus{border-color:#7c8cff}
+.vo-input:focus{border-color:#4fd1c5}
 .vo-mute{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:10px;cursor:pointer;
   padding:0 9px}
 .vo-meta{color:#6f7588;font-size:11px;margin-top:6px}
-.vo-orb{--vo-lvl:0;position:relative;width:64px;height:64px;border-radius:50%;border:0;padding:0;cursor:pointer;
+.vo-orb{--vo-lvl:0;position:relative;width:52px;height:52px;border-radius:50%;border:0;padding:0;cursor:pointer;
   background:transparent;outline:none}
-.vo-orb:focus-visible{box-shadow:0 0 0 3px rgba(124,140,255,.6)}
+.vo-orb:focus-visible{box-shadow:0 0 0 3px rgba(79,209,197,.6)}
 .vo-core{position:absolute;inset:6px;border-radius:50%;
-  background:radial-gradient(circle at 35% 30%,#c9d0ff 0%,#7c8cff 35%,#4a3fd1 75%,#24206b 100%);
-  box-shadow:0 6px 24px rgba(92,104,255,.55),inset 0 -6px 14px rgba(0,0,0,.35);transition:transform .08s linear}
-.vo-ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(124,140,255,.0)}
-.vo-off{position:absolute;right:4px;top:4px;width:10px;height:10px;border-radius:50%;background:#ff6b6b;
+  background:radial-gradient(circle at 35% 30%,#d4f7f3 0%,#4fd1c5 35%,#2a9d93 75%,#0f3d39 100%);
+  box-shadow:0 6px 24px rgba(79,209,197,.55),inset 0 -6px 14px rgba(0,0,0,.35);transition:transform .08s linear}
+.vo-ring{position:absolute;inset:0;border-radius:50%;border:2px solid rgba(79,209,197,.0)}
+.vo-off{position:absolute;right:4px;top:4px;width:10px;height:10px;border-radius:50%;background:#f87171;
   border:2px solid #0c0e14}
 .vo-orb[data-state=idle] .vo-core{animation:vo-breathe 3.6s ease-in-out infinite}
 .vo-orb[data-state=listening] .vo-core{transform:scale(calc(1 + var(--vo-lvl) * .28));
@@ -392,6 +469,7 @@ const CSS = `
   border-right-color:rgba(154,166,255,.4);animation:vo-spin .9s linear infinite}
 .vo-orb[data-state=thinking] .vo-ring2{display:none}
 .vo-orb[data-state=thinking] .vo-core{animation:vo-breathe 1.2s ease-in-out infinite}
+.vo-badge{margin-left:8px;padding:1px 7px;border-radius:999px;background:rgba(79,209,197,.18);color:#4fd1c5;font-size:11px;font-weight:600}
 .vo-orb[data-state=speaking] .vo-core{animation:vo-talk .45s ease-in-out infinite alternate;
   background:radial-gradient(circle at 35% 30%,#d9fff2 0%,#5fe3b5 40%,#1f9e7a 80%,#0d4a3a 100%);
   box-shadow:0 6px 28px rgba(60,220,170,.5)}

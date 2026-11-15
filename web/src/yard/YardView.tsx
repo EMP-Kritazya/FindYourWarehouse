@@ -353,7 +353,7 @@ export default function YardView({ propertyId, result, onClose, initialTime, ini
                 className={`px-2 py-1 font-mono text-[11.5px] ${s === speed ? 'bg-accent/20 text-accent' : 'text-ink-3 hover:text-ink'}`}>{s}×</button>
             ))}
           </div>
-          <span className="hidden text-[10px] text-ink-3 md:block">Imagery © Vexcel · Esri</span>
+          <span className="hidden text-[11px] text-ink-3 md:block">Imagery © Vexcel · Esri</span>
         </div>
       )}
     </div>
@@ -370,7 +370,7 @@ function Kpi({ label, value, sub, bad }: { label: string; value: string; sub?: s
   )
 }
 function Counter({ n, label, color }: { n: number; label: string; color: string }) {
-  return <div><div className={`text-[18px] font-semibold tabular-nums ${color}`}>{n}</div><div className="text-[10.5px] text-ink-3">{label}</div></div>
+  return <div><div className={`text-[18px] font-semibold tabular-nums ${color}`}>{n}</div><div className="text-[11px] text-ink-3">{label}</div></div>
 }
 function Legend({ color, label, solid }: { color: string; label: string; solid?: boolean }) {
   return (

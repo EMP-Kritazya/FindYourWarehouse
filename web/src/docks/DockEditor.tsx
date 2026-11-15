@@ -61,13 +61,13 @@ export default function DockEditor({ propertyId }: { propertyId: number }) {
   return (
     <aside className="glass drawer-in absolute bottom-4 right-4 top-4 z-20 flex w-[432px] flex-col overflow-hidden rounded-2xl" data-testid="dock-editor">
       <header className="flex items-start gap-2 border-b border-line px-4 py-3">
-        <button onClick={close} title="Back to the card" className="-ml-1 mt-0.5 rounded-lg p-1 text-ink-3 hover:bg-white/[0.06] hover:text-ink"><ChevronLeft size={16} /></button>
+        <button onClick={close} title="Back to the card" aria-label="Back to the card" className="-ml-1 mt-0.5 rounded-lg p-1 text-ink-3 hover:bg-white/[0.06] hover:text-ink"><ChevronLeft size={16} /></button>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2"><DoorOpen size={15} className="text-accent" /><h2 className="text-[15px] font-semibold">Dock review</h2>
-            {base?._fixture && <span className="rounded bg-warn/15 px-1.5 text-[10px] font-medium text-warn">dev fixture</span>}</div>
+            {base?._fixture && <span className="rounded bg-warn/15 px-1.5 text-[11px] font-medium text-warn">dev fixture</span>}</div>
           <div className="truncate text-[12px] text-ink-3">{pin?.address ?? `Property ${propertyId}`} · doors on the Vexcel footprint</div>
         </div>
-        <button onClick={close} title="Close (Esc)" className="rounded-lg p-1 text-ink-3 hover:bg-white/[0.06] hover:text-ink"><X size={16} /></button>
+        <button onClick={close} title="Close (Esc)" aria-label="Close (Esc)" className="rounded-lg p-1 text-ink-3 hover:bg-white/[0.06] hover:text-ink"><X size={16} /></button>
       </header>
 
       <div className="scroll-thin flex-1 space-y-5 overflow-y-auto p-4">
@@ -89,7 +89,7 @@ export default function DockEditor({ propertyId }: { propertyId: number }) {
                     <span className="text-[11px] text-ink-3">Dock-high estimate</span>
                     <span className="text-[15px] font-semibold tabular-nums">{est.value ?? '?'}</span>
                     {est.lo != null && est.hi != null && <span className="text-[12px] tabular-nums text-ink-3">range {est.lo}–{est.hi}</span>}
-                    <span className={clsx('ml-auto rounded px-1.5 text-[10px] font-medium uppercase tracking-wide',
+                    <span className={clsx('ml-auto rounded px-1.5 text-[11px] font-medium uppercase tracking-wide',
                       est.status === 'verified' ? 'bg-good/10 text-good' : est.status === 'unknown' ? 'bg-white/5 text-ink-3' : 'bg-warn/10 text-warn')}>{est.status.replace('_', ' ')}</span>
                   </div>
                   {est.basis && <div className="mt-0.5 text-[11.5px] leading-snug text-ink-2">{est.basis}</div>}
@@ -127,10 +127,10 @@ export default function DockEditor({ propertyId }: { propertyId: number }) {
                           className={clsx('flex w-full items-center gap-2 rounded-xl px-2.5 py-1.5 text-left text-[12px] transition',
                             d.id === ed.sel ? 'bg-accent/10 ring-1 ring-inset ring-accent/40' : 'hover:bg-white/[0.04]', d.status === 'rejected' && 'opacity-55')}>
                           <KindDot d={d} />
-                          <span className="w-8 font-mono text-ink">{d.id}</span>
+                          <span className="w-8 font-mono text-ink" title={d.id}>{d.label ?? d.id}</span>
                           <span className="w-[68px] text-ink-2">{KIND_LABEL[d.kind] ?? d.kind}</span>
                           <span className="font-mono text-[11px] tabular-nums text-ink-3">{d.width_ft != null ? `${d.width_ft}′` : '?'}</span>
-                          <span className="ml-auto truncate text-[10.5px] text-ink-3">{d.evidence.map((e) => EVIDENCE_LABEL[e.type] ?? e.type).filter((v, i, a) => a.indexOf(v) === i).join(', ')}</span>
+                          <span className="ml-auto truncate text-[11px] text-ink-3">{d.evidence.map((e) => EVIDENCE_LABEL[e.type] ?? e.type).filter((v, i, a) => a.indexOf(v) === i).join(', ')}</span>
                           <StatusChip s={d.status} />
                         </button>
                       ))}
@@ -219,7 +219,7 @@ function DoorDetail({ d }: { d: DockDoor }) {
     <div className="mt-2 rounded-xl bg-accent/[0.06] p-3 ring-1 ring-inset ring-accent/30" data-testid="door-detail">
       <div className="flex items-center gap-2">
         <KindDot d={d} />
-        <span className="font-mono text-[13px] font-semibold">{d.id}</span>
+        <span className="font-mono text-[13px] font-semibold" title={d.id}>{d.label ?? d.id}</span>
         <StatusChip s={d.status} />
         <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-3">{d.s_m.toFixed(1)} m along · {d.width_ft ?? '?'}×{d.height_ft ?? '?'} ft</span>
       </div>
@@ -232,9 +232,9 @@ function DoorDetail({ d }: { d: DockDoor }) {
       <div className="mt-2 flex gap-1.5">
         {d.status === 'rejected'
           ? <Btn onClick={() => ed.restore(d.id)}><RotateCcw size={13} /> Restore</Btn>
-          : <Btn onClick={() => ed.reject(d.id)} tone="bad"><X size={13} /> Not a door <kbd className="font-mono text-[10px] opacity-60">R</kbd></Btn>}
+          : <Btn onClick={() => ed.reject(d.id)} tone="bad"><X size={13} /> Not a door <kbd className="font-mono text-[11px] opacity-60">R</kbd></Btn>}
         {d.status === 'user_added' && <Btn onClick={() => ed.remove(d.id)} tone="bad"><Trash2 size={13} /> Delete</Btn>}
-        {(d.status === 'proposed' || d.status === 'inferred') && <Btn onClick={() => ed.confirm(d.id)} tone="good"><Check size={13} /> Confirm <kbd className="font-mono text-[10px] opacity-60">C</kbd></Btn>}
+        {(d.status === 'proposed' || d.status === 'inferred') && <Btn onClick={() => ed.confirm(d.id)} tone="good"><Check size={13} /> Confirm <kbd className="font-mono text-[11px] opacity-60">C</kbd></Btn>}
       </div>
       {d.evidence.length > 0 && (
         <ul className="mt-2 space-y-0.5 text-[11.5px] text-ink-2">
@@ -255,7 +255,7 @@ function KindDot({ d }: { d: DockDoor }) {
   return <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-[3px]" style={solid ? { background: col } : d.status === 'inferred' ? { background: `rgb(${c.join(' ')} / 0.4)` } : { border: `1.5px dashed ${col}` }} />
 }
 function StatusChip({ s }: { s: DockDoor['status'] }) {
-  return <span className={clsx('inline-flex h-[17px] shrink-0 items-center rounded px-1.5 text-[9.5px] font-medium uppercase tracking-wide ring-1 ring-inset', statusCls[s])}>{STATUS_LABEL[s] ?? s}</span>
+  return <span className={clsx('inline-flex h-[17px] shrink-0 items-center rounded px-1.5 text-[11px] font-medium uppercase tracking-wide ring-1 ring-inset', statusCls[s])}>{STATUS_LABEL[s] ?? s}</span>
 }
 function Title({ children, right }: { children: ReactNode; right?: ReactNode }) {
   return <div className="mb-2 flex items-center justify-between"><h3 className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">{children}</h3>{right}</div>
@@ -263,9 +263,9 @@ function Title({ children, right }: { children: ReactNode; right?: ReactNode }) 
 function Stat({ label, value, sub, tone }: { label: string; value: number | null | undefined; sub?: string; tone?: 'good' }) {
   return (
     <div className="rounded-lg bg-white/[0.03] px-2 py-1.5 ring-1 ring-inset ring-line">
-      <div className="truncate text-[10px] text-ink-3">{label}</div>
+      <div className="truncate text-[11px] text-ink-3">{label}</div>
       <div className={clsx('mt-0.5 text-[15px] font-semibold tabular-nums', value == null && 'text-ink-3', tone === 'good' && 'text-good')} title={value == null ? 'Unknown: not reported or not found' : undefined}>{value ?? '?'}</div>
-      {sub && <div className="truncate text-[10px] text-ink-3">{sub}</div>}
+      {sub && <div className="truncate text-[11px] text-ink-3">{sub}</div>}
     </div>
   )
 }

@@ -9,7 +9,7 @@ import HeroesMenu from './HeroesMenu'
 import ShortlistTray from './ShortlistTray'
 import { fmtInt, isNum } from '../lib/format'
 
-function Thumb({ id, photo }: { id: number; photo: string | null }) {
+export function Thumb({ id, photo }: { id: number; photo: string | null }) {
   // Vexcel ortho first (consistent top-down look), CoStar photo second, icon last.
   const cands = [`/media/twins/exterior/${id}_ortho.jpg`, photo].filter(Boolean) as string[]
   const [i, setI] = useState(0)
@@ -72,15 +72,15 @@ function Row({ pin, result, metric }: { pin: Pin; result?: Result; metric?: { ra
         {metric && (
           <div className="mt-1.5 flex items-baseline gap-2">
             <span className={clsx('text-[15px] font-semibold tabular-nums', metric.est ? 'text-ink-2' : 'text-accent')}>{metric.value}</span>
-            {metric.tag ? <span className={clsx('text-[10px]', metric.est ? 'rounded border border-dashed border-amber-300/50 px-1 text-amber-300/90' : 'text-ink-3')}>{metric.tag}</span>
-              : metric.date && <span className="text-[10px] text-amber-300/80">Vexcel {metric.date.slice(0, 7)}</span>}
+            {metric.tag ? <span className={clsx('text-[11px]', metric.est ? 'rounded border border-dashed border-amber-300/50 px-1 text-amber-300/90' : 'text-ink-3')}>{metric.tag}</span>
+              : metric.date && <span className="text-[11px] text-amber-300/80">Vexcel {metric.date.slice(0, 7)}</span>}
           </div>
         )}
         {!metric && result && result.mode === 'ranked' && (
           <div className="mt-2 flex items-center gap-3">
             {result.counts.fail + result.counts.near + result.counts.unknown === 0 ? (
               <span className="flex items-center gap-1.5 text-[12px] font-medium text-good">
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-good/15 text-[10px]">✓</span>
+                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-good/15 text-[11px]">✓</span>
                 Meets all {result.counts.pass}
               </span>
             ) : (
@@ -132,7 +132,9 @@ export default function ResultsRail() {
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent"><Warehouse size={16} /></div>
           <span className="text-[15px] font-semibold tracking-tight">ProInspect</span>
-          <span className="ml-auto"><HeroesMenu /></span>
+          <span className="ml-auto flex items-center gap-1"><HeroesMenu />
+            <button onClick={() => useStore.setState({ listOpen: false })} title="Back to the map" aria-label="Close the list"
+              className="rounded-md p-1.5 text-ink-3 hover:bg-white/5 hover:text-ink"><X size={15} /></button></span>
         </div>
         <div className="mt-3 flex items-baseline justify-between">
           <h2 className="text-[13px] font-medium text-ink">{ranking ? 'Ranked' : ranked ? 'Best matches' : 'Warehouses'} <span className="text-ink-3">in {market}</span></h2>
@@ -238,9 +240,9 @@ function RankedList() {
             {def && <div className="mt-1 text-[11px] leading-snug text-ink-2">{def.definition}</div>}
             {alt && <button onClick={() => rankBy(alt, ranking.market as never)} className="mt-1.5 text-[11px] text-accent hover:underline">Rank by {alt.replace(/_/g, ' ').replace(/ sqft| est$/g, '')} instead</button>}
           </div>
-          <button onClick={clearRanking} title="Back to all warehouses" className="rounded-md p-1 text-ink-3 hover:bg-white/5 hover:text-ink"><X size={14} /></button>
+          <button onClick={clearRanking} title="Back to all warehouses" aria-label="Back to all warehouses" className="rounded-md p-1 text-ink-3 hover:bg-white/5 hover:text-ink"><X size={14} /></button>
         </div>
-        {ranking.data?.note && <div className="mt-2 flex gap-1.5 text-[10px] leading-snug text-warn/85"><Info size={11} className="mt-px shrink-0" />{ranking.data.note}</div>}
+        {ranking.data?.note && <div className="mt-2 flex gap-1.5 text-[11px] leading-snug text-warn/85"><Info size={11} className="mt-px shrink-0" />{ranking.data.note}</div>}
       </div>
       <div className={clsx('scroll-thin flex-1 overflow-y-auto p-2', ranking.loading && 'opacity-50')}>
         {ranking.loading && !rows.length && Array.from({ length: 6 }, (_, i) => (

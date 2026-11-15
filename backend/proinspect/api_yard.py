@@ -173,3 +173,64 @@ def yard_get(run_id: str):
     if not p.exists():
         raise HTTPException(404, "no such yard run")
     return json.loads(p.read_text())
+
+
+# ------------------------------------------------------------------ yard verdict (card + compare)
+VERDICT_TEST = {"type": "semi_53", "count": 5}
+
+
+def _verdict_req(pid):
+    return ManeuverRequest(property_id=pid, trucks=[ManTruck(**VERDICT_TEST)])
+
+
+def verdict_from(res):
+    """The buyer-facing yard verdict from a standard maneuver run: one comparable line plus the numbers behind it."""
+    s = res.get("summary") or {}
+    doors = res.get("doors_used") or []
+    dock_capable = [d for d in doors if d.get("kind") != "drive_in"]
+    backin_ok = [d for d in dock_capable if (d.get("ok") or {}).get("semi_53")]
+    reached = sorted({v["target"]["id"] for v in res.get("vehicles") or []
+                      if v.get("status") == "done" and (v.get("target") or {}).get("kind") == "door"})
+    n, done = s.get("trucks") or 0, s.get("completed") or 0
+    at_once = s.get("docked_max") or 0
+    mins = round((s.get("makespan_s") or 0) / 60, 1)
+    wait = round(((s.get("worst_wait") or {}).get("s") or 0) / 60, 1)
+    if done < n:
+        grade = "poor"
+    elif at_once <= 1 or wait > 5 or len(reached) <= 2:
+        grade = "limited"
+    else:
+        grade = "good"
+    line = (f"53' back-in fits {len(backin_ok)} of {len(dock_capable)} dock doors · "
+            + (f"{done}/{n} trucks docked and left in {mins} min, {at_once} at a time"
+               + (f", up to {wait} min queue" if wait >= 1 else "") if done else
+               f"no truck could be driven from the street entrance to a door ({done}/{n})"))
+    limits = []
+    for cls in ("geometric", "congestion", "assumption", "planner"):
+        for i in res.get("issues") or []:
+            if i.get("class") == cls and i.get("trucks") is not None and len(limits) < 2:
+                limits.append({"class": cls, "text": i["text"]})
+    confirmed = all(d.get("status") in ("confirmed", "user_added") for d in dock_capable) and dock_capable
+    return {"status": "computed", "run_id": res.get("run_id"), "grade": grade, "line": line,
+            "test": "5 × 53 ft tractor-trailers arriving 30 s apart, 90 s at the door (the same test for every building)",
+            "dock_doors": len(dock_capable), "semi_backin_ok": len(backin_ok), "doors_reached": reached,
+            "docked_max": at_once, "trucks": n, "completed": done, "makespan_min": mins, "worst_wait_min": wait,
+            "limits": limits, "gate_source": (res.get("gate") or {}).get("source"),
+            "basis": ("dock doors confirmed by a person" if confirmed else
+                      "dock doors proposed from Vexcel obliques (not yet confirmed)") +
+                     "; property bounds and gate from the parcel/CoStar lot and OpenStreetMap"}
+
+
+@router.get("/api/yard/verdict/{pid}")
+def yard_verdict(pid: int, run: bool = False):
+    """The standard yard verdict. Cached runs answer instantly; run=true computes it (10-30 s cold)."""
+    req = _verdict_req(pid)
+    d = req.model_dump()
+    d["trucks"] = [{"type": t["type"], "count": t["count"]} for t in d["trucks"]]
+    d["door_ids"] = None
+    p = MAN / f"{_man_id(d)}.json"
+    if p.exists():
+        return verdict_from(json.loads(p.read_text()))
+    if not run:
+        return {"status": "not_run", "test": "5 × 53 ft tractor-trailers (the same test for every building)"}
+    return verdict_from(yard_maneuver(req))

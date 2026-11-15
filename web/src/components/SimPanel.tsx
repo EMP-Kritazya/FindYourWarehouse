@@ -93,7 +93,7 @@ export default function SimPanel({ id, scan, address, sqft }: { id: number; scan
             const Icon = ICONS[p.icon] ?? Warehouse
             const on = k === profile
             return (
-              <button key={k} onClick={() => setProfile(k)} title={p.description}
+              <button key={k} onClick={() => setProfile(k)} title={p.description} aria-label={p.description}
                 className={clsx('flex h-[58px] items-center gap-2.5 rounded-xl px-3 text-left ring-1 ring-inset transition',
                   on ? 'bg-accent/12 ring-accent/60' : 'bg-white/[0.03] ring-line hover:ring-line-2')}>
                 <span className={clsx('flex h-8 w-8 shrink-0 items-center justify-center rounded-lg', on ? 'bg-accent text-bg' : 'bg-white/5 text-ink-2')}>
@@ -213,7 +213,7 @@ function KpiTile({ def, band, of }: { def: KpiDef; band: Band | null; of: Band |
         <div className="absolute inset-y-0 rounded-full bg-accent/40" style={{ left: pct(band.p10), width: `calc(${pct(band.p90)} - ${pct(band.p10)} + 2px)` }} />
         <div className="absolute -top-[3px] h-[10px] w-[2px] rounded bg-accent" style={{ left: pct(band.p50) }} />
       </div>
-      <div className="mt-1.5 flex justify-between text-[10px] tabular-nums text-ink-3">
+      <div className="mt-1.5 flex justify-between text-[11px] tabular-nums text-ink-3">
         <span>P10 {def.fmt(band.p10)}</span><span>P90 {def.fmt(band.p90)}</span>
       </div>
     </div>
@@ -233,7 +233,7 @@ export function LayoutFacts({ layout }: { layout: Record<string, unknown> }) {
       <div className="grid grid-cols-4 gap-2">
         {items.map(([l, v]) => (
           <div key={l} className="rounded-lg bg-white/[0.03] px-2.5 py-2 ring-1 ring-inset ring-line">
-            <div className="text-[10px] leading-tight text-ink-3">{l}</div>
+            <div className="text-[11px] leading-tight text-ink-3">{l}</div>
             <div className="mt-0.5 text-[14px] font-semibold tabular-nums">{v ?? <span className="text-ink-3">?</span>}</div>
           </div>
         ))}

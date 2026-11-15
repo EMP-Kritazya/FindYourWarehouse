@@ -254,7 +254,7 @@ export default function ManeuverView({ propertyId, result, onRerun }: Props) {
         {sel && (
           <div className="glass pointer-events-auto rounded-xl p-3 fade-up" data-testid="issue-pop">
             <div className="flex items-center gap-2">
-              <span className={clsx('inline-flex h-[18px] items-center rounded px-1.5 text-[10px] font-semibold uppercase tracking-wide ring-1 ring-inset', ISSUE_STYLE[sel.class]?.cls)}>{ISSUE_STYLE[sel.class]?.label ?? sel.class}</span>
+              <span className={clsx('inline-flex h-[18px] items-center rounded px-1.5 text-[11px] font-semibold uppercase tracking-wide ring-1 ring-inset', ISSUE_STYLE[sel.class]?.cls)}>{ISSUE_STYLE[sel.class]?.label ?? sel.class}</span>
               <span className="text-[11px] text-ink-3">#{pinIssues.find((x) => x.i === selIssue)?.n ?? issueRows(issues).find((x) => x.i === selIssue)?.n} · {sel.severity}</span>
               <button onClick={() => selectIssue(null)} className="ml-auto rounded p-0.5 text-ink-3 hover:bg-white/10 hover:text-ink" aria-label="Close"><X size={13} /></button>
             </div>
@@ -285,7 +285,7 @@ export default function ManeuverView({ propertyId, result, onRerun }: Props) {
         <div className="glass absolute right-3 top-3 z-10 rounded-xl px-3.5 py-2.5" data-testid="maneuver-clock">
           <div className="flex items-baseline justify-between gap-3">
             <span className="font-mono text-[20px] font-semibold tabular-nums">{mmss(t - t0)}</span>
-            <span className="text-[10px] text-ink-3">of {mmss(t1 - t0)}</span>
+            <span className="text-[11px] text-ink-3">of {mmss(t1 - t0)}</span>
           </div>
           <div className="mt-1 grid grid-cols-4 gap-2.5 text-center">
             <Counter n={live.moving} label="moving" cls="text-ink" />
@@ -298,7 +298,7 @@ export default function ManeuverView({ propertyId, result, onRerun }: Props) {
 
       {/* legend */}
       {res && (
-        <div className="glass absolute bottom-[62px] right-3 z-10 space-y-1 rounded-xl px-3 py-2 text-[10.5px] text-ink-2">
+        <div className="glass absolute bottom-[62px] right-3 z-10 space-y-1 rounded-xl px-3 py-2 text-[11px] text-ink-2">
           <div className="flex items-center gap-2"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--color-ink-2)" strokeWidth="2" /></svg>forward</div>
           <div className="flex items-center gap-2"><svg width="22" height="6"><line x1="0" y1="3" x2="22" y2="3" stroke="var(--color-ink-2)" strokeWidth="2" strokeDasharray="4 3" /></svg>reverse (back-in)</div>
           <div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-accent" />dock-high · <span className="h-2.5 w-2.5 rounded-full bg-warn" />drive-in · <span className="h-2.5 w-2.5 rounded-full bg-ink-3" />?</div>
@@ -350,7 +350,7 @@ export default function ManeuverView({ propertyId, result, onRerun }: Props) {
 }
 
 function Counter({ n, label, cls }: { n: number; label: string; cls: string }) {
-  return <div><div className={clsx('text-[16px] font-semibold tabular-nums leading-tight', cls)}>{n}</div><div className="text-[9.5px] text-ink-3">{label}</div></div>
+  return <div><div className={clsx('text-[16px] font-semibold tabular-nums leading-tight', cls)}>{n}</div><div className="text-[11px] text-ink-3">{label}</div></div>
 }
 function IconBtn({ children, title, onClick, disabled }: { children: React.ReactNode; title: string; onClick?: () => void; disabled?: boolean }) {
   return (

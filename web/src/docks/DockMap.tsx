@@ -329,7 +329,7 @@ export default function DockMap({ propertyId }: { propertyId: number }) {
       }),
       selDoor && new TextLayer({
         id: 'dk-sel-label', data: [selDoor], getPosition: (d: DockDoor) => enuToLonLat(base.frame, d.x + d.normal[0] * 5.5, d.y + d.normal[1] * 5.5),
-        getText: (d: DockDoor) => d.id, getSize: 11, getColor: [232, 236, 242, 255], fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+        getText: (d: DockDoor) => d.label ?? d.id, getSize: 11, getColor: [232, 236, 242, 255], fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
         background: true, getBackgroundColor: [10, 13, 18, 220], backgroundPadding: [4, 2, 4, 2],
       }),
       ghost && new ScatterplotLayer({
@@ -383,7 +383,7 @@ function Toolbar({ tool }: { tool: DockTool }) {
         <button key={k} type="button" onClick={() => set(k)} data-tool={k} title={`${label} (${key})`}
           className={clsx('flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-[12px] font-medium transition',
             tool === k ? 'bg-accent/20 text-accent ring-1 ring-inset ring-accent/40' : 'text-ink-2 hover:bg-white/[0.06] hover:text-ink')}>
-          {icon}{label}<span className="ml-0.5 rounded bg-white/[0.06] px-1 font-mono text-[10px] text-ink-3">{key}</span>
+          {icon}{label}<span className="ml-0.5 rounded bg-white/[0.06] px-1 font-mono text-[11px] text-ink-3">{key}</span>
         </button>
       ))}
     </div>

@@ -74,7 +74,7 @@ function Profile({ p }: { p: VexcelProfile }) {
       </Group>
       {defects.length > 0 && (
         <div className="mt-1.5 flex flex-wrap gap-1">
-          {defects.map((x) => <span key={String(x)} className="rounded bg-bad/10 px-1.5 py-0.5 text-[10px] text-bad ring-1 ring-inset ring-bad/20">{String(x).replace(/_/g, ' ')}</span>)}
+          {defects.map((x) => <span key={String(x)} className="rounded bg-bad/10 px-1.5 py-0.5 text-[11px] text-bad ring-1 ring-inset ring-bad/20">{String(x).replace(/_/g, ' ')}</span>)}
         </div>
       )}
 
@@ -87,7 +87,7 @@ function Profile({ p }: { p: VexcelProfile }) {
 function Group({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="mt-2">
-      <div className="mb-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3/80">{label}</div>
+      <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3/80">{label}</div>
       <div className="grid grid-cols-3 gap-1.5">{children}</div>
     </div>
   )
@@ -95,7 +95,7 @@ function Group({ label, children }: { label: string; children: ReactNode }) {
 
 function VChip({ date, estimate }: { date?: string; estimate?: boolean }) {
   return (
-    <span className="inline-flex h-[16px] items-center gap-1 rounded px-1 text-[9px] font-medium uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/25">
+    <span className="inline-flex h-[16px] items-center gap-1 rounded px-1 text-[11px] font-medium uppercase tracking-wide text-amber-300 ring-1 ring-inset ring-amber-400/25">
       Vexcel{date ? <span className="normal-case tracking-normal text-amber-200/70">{yearOf(date) === date ? date : date.slice(0, 7)}</span> : null}
       {estimate && <span className="normal-case tracking-normal text-warn">est.</span>}
     </span>
@@ -110,10 +110,10 @@ function Cell({ icon, label, val, fmt, sub, alt, forceEstimate, caveat }: {
   const title = has ? [val!.method, val!.date && `captured ${val!.date}`, est && 'Estimate, not a count', val!.note].filter(Boolean).join(' · ') : val?.note ?? UNKNOWN
   return (
     <div className="min-w-0 rounded-lg bg-white/[0.03] px-2.5 py-2 ring-1 ring-inset ring-line" title={title}>
-      <div className="flex items-center gap-1 truncate text-[10px] text-ink-3">{icon}{label}</div>
+      <div className="flex items-center gap-1 truncate text-[11px] text-ink-3">{icon}{label}</div>
       <div className="mt-0.5 truncate text-[14px] font-semibold tabular-nums">{has ? fmt(val!.v) : <span className="cursor-help text-ink-3">?</span>}</div>
-      {(sub || alt) && <div className="truncate text-[10px] text-ink-2">{sub ?? alt}</div>}
-      {has && caveat && <div className="truncate text-[10px] text-warn/80" title={caveat}>{caveat}</div>}
+      {(sub || alt) && <div className="truncate text-[11px] text-ink-2">{sub ?? alt}</div>}
+      {has && caveat && <div className="truncate text-[11px] text-warn/80" title={caveat}>{caveat}</div>}
       {has && <div className="mt-1"><VChip date={val!.date} estimate={est} /></div>}
     </div>
   )
@@ -126,7 +126,7 @@ function HistoryRow({ p }: { p: VexcelProfile }) {
   const years = [...new Set(dates.map(yearOf))]
   return (
     <div className="mt-3">
-      <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3/80"><History size={11} /> History</div>
+      <div className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3/80"><History size={11} /> History</div>
       <div className="rounded-lg bg-white/[0.03] px-2.5 py-2 ring-1 ring-inset ring-line">
         <div className="flex flex-wrap items-center gap-1">
           {years.map((y, i) => (
@@ -166,7 +166,7 @@ function Nearby({ p }: { p: VexcelProfile }) {
     .sort((a, b) => (ORDER.indexOf(a[0]) + 99) % 99 - (ORDER.indexOf(b[0]) + 99) % 99)
   return (
     <div className="mt-3">
-      <div className="mb-1 flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.08em] text-ink-3/80"><MapPin size={11} /> Nearby (image search)</div>
+      <div className="mb-1 flex items-center gap-1 text-[11px] font-medium uppercase tracking-[0.08em] text-ink-3/80"><MapPin size={11} /> Nearby (image search)</div>
       {entries.length === 0 ? (
         <div className="rounded-lg bg-white/[0.03] px-2.5 py-2 text-[11px] text-ink-3 ring-1 ring-inset ring-line">Nearby places are not computed for this property yet.</div>
       ) : (
@@ -176,7 +176,7 @@ function Nearby({ p }: { p: VexcelProfile }) {
             thumb_url: h.thumb_url, likelihood: h.likelihood, score: h.score, distance_m: h.distance_m, nearId: p.id })} />)}
         </div>
       )}
-      <div className="mt-1 text-[10px] leading-snug text-ink-3">Matched by Vexcel image embeddings within ~3 km. "Likely" and "possible" are match strengths, not confirmed places.</div>
+      <div className="mt-1 text-[11px] leading-snug text-ink-3">Matched by Vexcel image embeddings within ~3 km. "Likely" and "possible" are match strengths, not confirmed places.</div>
     </div>
   )
 }
@@ -192,14 +192,14 @@ function NearbyRow({ k, h, onShow }: { k: string; h: NearbyHit & { caveat?: stri
     )
   }
   return (
-    <button onClick={onShow} title={[h.label, h.caveat].filter(Boolean).join(' · ') + ' · show on the map'} className="flex w-full items-center gap-2.5 bg-white/[0.02] px-2 py-1.5 text-left transition hover:bg-white/[0.05]" >
+    <button onClick={onShow} title={[h.label, h.caveat].filter(Boolean).join(' · ') + ' · show on the map'} aria-label={[h.label, h.caveat].filter(Boolean).join(' · ') + ' · show on the map'} className="flex w-full items-center gap-2.5 bg-white/[0.02] px-2 py-1.5 text-left transition hover:bg-white/[0.05]" >
       {h.thumb_url && ok ? <img src={h.thumb_url} alt="" onError={() => setOk(false)} className="h-9 w-9 shrink-0 rounded object-cover ring-1 ring-white/10" />
         : <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded bg-panel-3 text-ink-3"><MapPin size={13} /></div>}
       <div className="min-w-0 flex-1">
         <div className="truncate text-[12px] capitalize text-ink">{placeLabel(k)}</div>
         <div className="truncate text-[11px] tabular-nums text-ink-3">{fmtDist(h.distance_m)}{isNum(h.score) ? ` · score ${h.score.toFixed(2)}` : ''}{h.label && h.label.toLowerCase() !== placeLabel(k) ? ` · ${h.label}` : ''}</div>
       </div>
-      {h.likelihood && <span className={clsx('rounded px-1.5 py-0.5 text-[10px] font-medium', h.likelihood === 'likely' ? 'bg-good/15 text-good' : 'bg-warn/15 text-warn')}>{h.likelihood}</span>}
+      {h.likelihood && <span className={clsx('rounded px-1.5 py-0.5 text-[11px] font-medium', h.likelihood === 'likely' ? 'bg-good/15 text-good' : 'bg-warn/15 text-warn')}>{h.likelihood}</span>}
     </button>
   )
 }

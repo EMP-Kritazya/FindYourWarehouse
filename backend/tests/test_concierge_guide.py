@@ -145,7 +145,7 @@ def test_buyer_profile_then_search_then_open_card_event():
     p = g.profile
     assert p["business"] == "pallet_3pl" and p["size_sqft"] == 40000
     assert p["trucks"] == ["semi_53"] and p["equipment"] == ["reach_truck"]
-    assert uis(ev)[0][0] == "search"
+    assert uis(ev)[0][0] == "profile" and uis(ev)[0][1]["profile"]["business"] == "pallet_3pl" and uis(ev)[1][0] == "search"
     top = g.last_search["ids"][0]
 
     reply2, ev2 = event(g, "openCard", {"id": top})
@@ -168,10 +168,12 @@ def test_event_skipped_when_the_guide_opened_the_card_itself():
     assert r is None and len(m.seen) == calls
 
 
-def test_search_results_and_test_result_events_comment():
-    g, m = make([say("Top three are on the map. Open the first?"), say("It passes, limited by the tightest turn.")])
+def test_search_results_stay_quiet_and_test_result_events_comment():
+    """Unprompted remarks only where they add something: search results are already on screen (no comment); a test
+    result is explained."""
+    g, m = make([say("It passes, limited by the tightest turn.")])
     r, _ = event(g, "searchResults", {"query": "warehouses in Houston"})
-    assert r and "[EVENT searchResults" in json.dumps(m.seen[-1])
+    assert r is None
     r2, _ = event(g, "testResult", {"kind": "yard", "result": {"run_id": "r1", "fits": [
         {"door_id": "d1", "vehicle": "semi_53", "ok": True, "margin_m": 1.2, "conflicts": []}], "queue": {}}})
     assert r2 and g.stage == "tested"
@@ -303,9 +305,12 @@ def _until(ws, kind):
 
 def test_ws_event_gets_a_proactive_comment(ws_guide):
     client, scripts = ws_guide
-    scripts.append([say("Big building, docks are good. Add it to your shortlist?")])
+    scripts.append([say("It passes the yard test. Add it to your shortlist?")])
     with client.websocket_connect("/ws/concierge") as ws:
-        ws.send_json({"type": "event", "name": "openCard", "data": {"id": HERO}})
+        # an unknown buyer opening a card stays quiet now; a test result always earns a comment
+        ws.send_json({"type": "event", "name": "testResult", "data": {"id": HERO, "kind": "yard", "result": {
+            "run_id": "r1", "fits": [{"door_id": "d1", "vehicle": "semi_53", "ok": True, "margin_m": 1.0, "conflicts": []}],
+            "queue": {}}}})
         msgs = _until(ws, "metrics")
     done = next(m for m in msgs if m["type"] == "assistant_done")
     assert done["kind"] == "event" and "shortlist" in done["text"]

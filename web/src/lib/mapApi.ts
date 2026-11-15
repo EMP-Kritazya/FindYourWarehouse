@@ -66,3 +66,5 @@ export const mapApi = {
   zoomBy(d: number) { if (map) map.easeTo({ zoom: map.getZoom() + d, duration: 300 }) },
   togglePitch() { if (map) map.easeTo({ pitch: map.getPitch() > 20 ? 0 : 50, bearing: map.getPitch() > 20 ? 0 : -15, duration: 600 }) },
 }
+
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__mapApi = mapApi   // dev-only handle (demo capture, tests)

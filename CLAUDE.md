@@ -627,3 +627,35 @@ vegetation attributes, roadway intelligence, semantic embeddings.
     - `InteriorWorkspace`: `PalletBar` (presets, W / D / load, debounced) + spec chips + layout checks.
   - **Object heights** are only measured bounds (< 6.6 ft, or full height ≥ deck − 4.9 ft); exact tops are not
     extracted.
+- **True cost per pallet (2026-11-15, additive; `PROINSPECT_COST=0` turns it off):**
+  - **`rent_comps.py`:** builds `build/economics/rent_comps.json` from CoStar lease comps
+    (`leaseDeal.rateActual`, industrial / flex, 2020+, monthly × 12, $1–80/SF/yr). Tiers:
+    - asking (30) > own signed lease (13) > submarket comps ≥ 3 (37) > market-wide comps (30, "rough");
+    - market medians: Houston $10.59, LA $18.48 /SF/yr.
+  - **`economics.py`** + `library/costs.yaml` (assumed unit costs, [U]):
+    - rent × SF (available SF or RBA);
+    - racking amortised by zone type;
+    - forklift leases + operators from `interior.plan()` (read only; scaled to the building and the leased share);
+    - results: $ per position per month, $ per pallet moved.
+  - **API and UI:** `GET/POST /api/economics/{pid}`; analyst tool `cost_per_pallet`. UI: `web/src/economics/`
+    (HUD line, `CostPanel` with what-if, duel row when > 10% apart). New `SrcTag` kinds recorded / estimate /
+    unknown.
+- **Flood exposure (2026-11-15, additive; `PROINSPECT_FLOOD=0` turns it off):** `flood.py`.
+  - **Facts from the Vexcel DTM:**
+    - pad vs the 30–300 m surroundings;
+    - lowest ground at the walls;
+    - ponding (priority-flood sink fill, ≥ 25 cm, ≥ 50 m², storm drains not modelled);
+    - dock wells (usually "not resolved": the DTM smooths them);
+    - HAND above the nearest OSM waterway (`roads.waterways`, ≤ 1.6 km; a 2 m DTM, retried at 4 m).
+  - **FEMA zone:** the Esri Living Atlas NFHL mirror (fast), with FEMA's own MapServer/28 as fallback (it often
+    times out). No polygon = "Outside FEMA's mapped flood areas".
+  - **Indicator:**
+    - Higher = SFHA, or HAND < 5, or at grade (pad < 0.5) with HAND < 15;
+    - Moderate = 0.2% zone, or HAND 5–15, or pad < 3, or wells + ponding;
+    - missing inputs → partial / "Not enough data", never safe.
+  - **Cache, API, analyst:** `build/flood/{pid}.json`, keyed by the flood.py code hash.
+    `GET /api/flood/{pid}` (cache only) / `?run=true`. Analyst tool `flood_exposure` + UI command `showFlood`.
+  - **UI:** `web/src/flood/FloodPanel.tsx` (HUD line, panel with cross-section, ponding + waterway map layers while
+    open, duel row). Cost and flood panels close each other.
+  - **3200 Sam Houston:** Zone AE, pad 0.2 ft, 11.3 ft above Clear Creek → Higher.
+  - **Precompute:** after editing flood.py, rerun the scratchpad `flood_precompute.py` (or open the panel).

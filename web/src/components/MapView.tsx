@@ -9,6 +9,7 @@ import type { StyleSpecification } from 'maplibre-gl'
 import { attachVexcel, buildStyle } from '../lib/basemap'
 import PlacePopup from './PlacePopup'
 import { DockLegend, DockProofPopup, lastDockClick, useDockLayers } from '../docks/DockOverlay'
+import { useFloodLayers } from '../flood/FloodPanel'
 import { useStore } from '../lib/store'
 import { mapApi, MARKET_VIEW } from '../lib/mapApi'
 import type { Pin, Result } from '../lib/api'
@@ -76,6 +77,7 @@ export default function MapView() {
 
   // the selected property's footprint, doors and gate (docks/DockOverlay); its tower hides so the building shows
   const dock = useDockLayers(selectedId)
+  const floodLayers = useFloodLayers()
 
   const rankOf = useMemo(() => {
     const m = new globalThis.Map<number, number>()
@@ -175,6 +177,7 @@ export default function MapView() {
         getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: (d) => pinR(d) + 4, billboard: true, getLineColor: [251, 191, 36, 235], getLineWidth: 2,
       }),
       // docks are drawn through the 3D site surface (x-ray), so walls and roofs never hide them
+      ...floodLayers,
       ...dock.layers.map((l) => (l ? l.clone({ parameters: { depthCompare: "always", depthWriteEnabled: false } }) : l)),
       place && near && new LineLayer({
         id: 'place-link', data: [{ a: [near.lon, near.lat], b: [place.lon, place.lat] }], getSourcePosition: (d: { a: number[] }) => d.a as [number, number],
@@ -199,7 +202,7 @@ export default function MapView() {
         updateTriggers: { getPosition: [zoom] },
       }),
     ]
-  }, [data, zoom, market, selectedId, hoveredId, highlightIds, compareIds, onHover, select, search, ortho, terrain, show3d, shortlist, place, dock])
+  }, [data, zoom, market, selectedId, hoveredId, highlightIds, compareIds, onHover, select, search, ortho, terrain, show3d, shortlist, place, dock, floodLayers])
 
   useEffect(() => () => mapApi.attach(null), [])
 

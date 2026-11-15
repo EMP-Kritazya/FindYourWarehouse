@@ -8,6 +8,8 @@ import { askGuide } from '../lib/guide'
 import type { Pin, Result, Twin, WarehouseDetail } from '../lib/api'
 import { GRADE, useYardVerdict } from './YardVerdict'
 import { useStorage } from '../racks/StorageSummary'
+import { CostLineHud } from '../economics/CostPanel'
+import { FloodLineHud } from '../flood/FloodPanel'
 
 const k = (v: number | null | undefined) => (v == null ? '?' : v >= 10000 ? `${(v / 1000).toFixed(v >= 100000 ? 0 : 1)}k` : v.toLocaleString())
 
@@ -92,6 +94,11 @@ export default function PropertyHud({ id, pin, w, twin, result, excluded, ranked
         {iv?.scan_coverage_pct != null && iv.scan_coverage_pct < 30 && (
           <div className="text-[11.5px] leading-snug text-warn">Interior numbers cover only the {Math.round(iv.scan_coverage_pct)}% of the building that was scanned.</div>
         )}
+
+        <div className="space-y-1.5">
+          <CostLineHud id={id} />
+          <FloodLineHud id={id} />
+        </div>
 
         <div className="grid grid-cols-3 gap-1.5">
           <Action icon={<Truck size={15} />} label="Yard test" onClick={openYard} />

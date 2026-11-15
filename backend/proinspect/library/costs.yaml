@@ -1,0 +1,25 @@
+# Operating-cost assumptions for the "true cost per pallet" model (proinspect/economics.py).
+# Every number here is an ASSUMPTION (typical US ranges, 2024-25) marked [U]: shown as "assumed" in the UI and
+# editable there. Replace with your own quotes. Rent never comes from this file (see rent_comps.py).
+rack_per_position:              # installed $ per pallet position (frames, beams, decking, anchoring) [U]
+  selective: {value: 85, basis: "selective pallet rack, installed, typical US 2024-25 ($60-110)"}
+  dense: {value: 100, basis: "double-deep pallet rack, installed ($80-130)"}
+  cantilever: {value: 120, basis: "cantilever rack per arm-level position ($90-160)"}
+  shelving: {value: 40, basis: "steel pick shelving per pick face ($25-60)"}
+machine_lease_month:            # full-maintenance lease $ per machine per month [U]
+  counterbalance_lpg: {value: 950, basis: "LPG counterbalance forklift, 5 yr full-service lease"}
+  counterbalance_electric: {value: 1100, basis: "electric counterbalance incl. battery + charger"}
+  reach_truck: {value: 1400, basis: "stand-up reach truck incl. battery + charger"}
+  order_picker: {value: 1300, basis: "order picker incl. battery"}
+  vna_turret: {value: 3500, basis: "VNA turret truck incl. wire guidance share"}
+  pallet_jack_electric: {value: 400, basis: "electric pallet jack"}
+  walkie_stacker: {value: 600, basis: "walkie stacker"}
+  amr_goods_to_person: {value: 2500, basis: "AMR robot-as-a-service, per robot"}
+  autonomous_forklift: {value: 4500, basis: "autonomous forklift robot-as-a-service"}
+  tugger_train: {value: 900, basis: "tugger + carts"}
+operator_wage_hour:             # fully loaded $ per operator hour (wage x ~1.3 burden) [U]
+  Houston: {value: 25, basis: "Houston forklift operator ~$19/h x 1.3 burden"}
+  Los Angeles: {value: 30, basis: "Los Angeles forklift operator ~$23/h x 1.3 burden"}
+working_days_year: {value: 250, basis: "5 days a week, holidays off"}
+shifts_per_day: {value: 1, basis: "one shift (the operation profile's shift length)"}
+amortise_years: {value: 7, basis: "racking written off over 7 years"}

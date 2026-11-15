@@ -16,6 +16,9 @@ export const SRC: Record<DimSource, { label: string; cls: string; hint: string }
   assumed: { label: 'Assumed', cls: 'bg-warn/12 text-warn ring-warn/30', hint: 'A standard spec or library value, not a measurement. Change it if yours differs.' },
   yours: { label: 'Yours', cls: 'bg-accent/12 text-accent ring-accent/30', hint: 'What you entered' },
   calculated: { label: 'Calculated', cls: 'bg-indigo-400/12 text-indigo-300 ring-indigo-300/30', hint: 'Derived from the measured and assumed values' },
+  recorded: { label: 'Recorded', cls: 'bg-good/12 text-good ring-good/30', hint: 'Recorded by CoStar (a listing or a signed lease)' },
+  estimate: { label: 'Estimate', cls: 'bg-sky-400/12 text-sky-300 ring-sky-300/30', hint: "Estimated from comparable signed leases, not this building's own number" },
+  unknown: { label: 'Unknown', cls: 'bg-white/[0.05] text-ink-3 ring-line', hint: 'No data: never counted as zero' },
 }
 export function SrcTag({ s }: { s: DimSource }) {
   const t = SRC[s]

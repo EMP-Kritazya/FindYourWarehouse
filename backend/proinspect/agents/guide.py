@@ -39,7 +39,7 @@ EFFORT = os.environ.get("PROINSPECT_GUIDE_EFFORT", "low")
 EVENT_GAP_S = 8.0                # at most one unprompted comment per this many seconds
 UI_CMDS = ("search", "flyTo", "openCard", "highlight", "compare", "showInside", "yardTest", "equipmentTest",
            "showPlace", "rankBy", "showAerial", "shortlist", "rankAttribute", "showDocks", "storageTest",
-           "closeCompare", "results")
+           "closeCompare", "results", "showFlood")
 ONE_ID = ("flyTo", "openCard", "showInside", "showAerial", "yardTest", "equipmentTest", "showDocks", "storageTest")
 # a test runs only when the user's own words in THIS turn ask for one (never from an event or the agent's initiative)
 ASK_YARD = re.compile(r"\b(test|simulate|run it|go ahead|yes|yep|sure|do it|maneuver|back(ing)?[- ]in|turn(ing)? around|"
@@ -126,6 +126,11 @@ Refer to buildings by street address, never by id.
 pallets?", "how many forklifts?" -> storage_capacity(id) (it opens the planner, where the user picks their \
 operation; it reports forklift reach %, minutes per pallet and machines needed). Never offer a separate Equipment \
 test. The old Yard test: prepare_test, read the plan back, run_test only after the user's yes in their NEXT message.
+- Money: "what will it cost", "cheapest for my operation", "$ per pallet" -> cost_per_pallet(ids). Quote the
+$ per pallet position per month and say where the rent comes from in a few words (asking rent / its own signed
+lease / submarket comps / market-wide estimate). Never call an estimate the building's rent.
+- Water: "will it flood", "flood zone", "is it high ground" -> flood_exposure(id). Say the indicator and the
+FEMA zone, plus the one fact that drove it, in one sentence; add "not an insurance determination" once.
 - Selling help: listing_contact; request_tour only logs the intent (nothing is sent; say so).
 - Messages starting with [EVENT ...] are what the user just did on screen. Comment in 1-2 sentences from the facts \
 given (one insight that matters for this buyer, or one unknown worth checking), then a next-step question.
@@ -788,13 +793,52 @@ class Guide:
             return {"address": w.get("address"), "equipment": p["equipment_name"], **{k: p[k] for k in keep},
                     "trucks": t["trucks"]}
 
+        async def cost_per_pallet(ids: list[int], operation: Optional[str] = None):
+            """True cost per pallet for 1-4 warehouses: rent (asking > the building's own signed lease > submarket
+            lease comps > market-wide comps; each says which), racking amortised, forklift leases and operators for
+            the operation, as $ per pallet position per month and $ per pallet moved. Assumed unit costs are
+            labelled assumed. Use for "what will it cost", "which is cheapest for my operation"."""
+            from proinspect import economics as EC
+            if not EC.ENABLED:
+                return {"error": "the cost model is switched off"}
+            op = operation or g.profile.get("business") or "pallet_3pl"
+            out = []
+            for i in [int(x) for x in ids or [] if G.wh(x)][:4]:
+                c = await asyncio.to_thread(EC.cost, i, op)
+                out.append({"id": i, "address": c["address"], "headline": c["headline"],
+                            "per_position_month": c["per_position_month"], "per_pallet_moved": c["per_pallet_moved"],
+                            "rent": {k: c["rent"].get(k) for k in ("tier", "value", "low", "high", "basis")},
+                            "lines": [{k: l[k] for k in ("label", "value", "source")} for l in c["lines"]],
+                            "positions": c.get("positions"), "space_sqft": c["space"]["sqft"],
+                            "note": c.get("plan_note")})
+            return {"operation": op, "results": out} if out else {"error": "no valid warehouse ids"}
+
+        async def flood_exposure(id: int):
+            """Flood exposure of one warehouse from MEASURED Vexcel elevation (pad height above the surroundings, low
+            spots, height above the nearest bayou/channel) plus the official FEMA flood zone; returns the indicator
+            (Higher / Moderate / Lower exposure, partial when data is missing) and the rule that fired. Not an
+            insurance flood determination. First run for a building can take ~30-60 s."""
+            from proinspect import flood as FL
+            if not FL.ENABLED:
+                return {"error": "flood exposure is switched off"}
+            w = G.wh(id) or G.find_by_address(str(id))
+            if not w:
+                return {"error": f"warehouse {id} is not in the catalog"}
+            r = await asyncio.to_thread(FL.assess, w["id"], True, True)
+            await g.ui("showFlood", {"id": w["id"]})
+            return {"address": r.get("address"), "indicator": r.get("indicator"), "fema": (r.get("fema") or {}).get("label"),
+                    "waterway": r.get("waterway"),
+                    "facts": {k: {"value": v["value"], "unit": v["unit"], "source": v["source"]} for k, v in r["facts"].items()},
+                    "missing": r.get("missing"), "note": r.get("note")}
+
         T = {f.__name__: self._tool(f) for f in (
             search_warehouses, rank_by, closest_to, building_brief, find_address, update_buyer_profile, shortlist,
             listing_contact, request_tour, prepare_test, run_test, last_test_result, ui, suggest, get_facts,
             explain_rank, compare_buildings, vexcel_profile, vexcel_rank, vexcel_search, vexcel_detect,
             vexcel_imagery, vexcel_metrics, interior_facts, rank_attribute, dock_evidence, compare_warehouses,
-            find_comparables, yard_maneuver_test, storage_capacity)}
-        orch = [T[n] for n in ("search_warehouses", "rank_attribute", "dock_evidence", "compare_warehouses",
+            find_comparables, yard_maneuver_test, storage_capacity, cost_per_pallet, flood_exposure)}
+        orch = [T[n] for n in ("search_warehouses", "rank_attribute", "dock_evidence", "compare_warehouses", "cost_per_pallet",
+                               "flood_exposure",
                                "find_comparables", "yard_maneuver_test", "storage_capacity", "rank_by", "closest_to", "building_brief",
                                "find_address", "update_buyer_profile", "shortlist", "listing_contact", "request_tour",
                                "prepare_test", "run_test", "ui", "suggest")]

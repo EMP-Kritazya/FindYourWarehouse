@@ -54,6 +54,10 @@ interface State {
   buyerProfile: Record<string, unknown> | null
   /** an explicit list the analyst put on the strip (closest to X, comparables, a ranking within a set) */
   curated: { title: string; ids: number[]; values?: Record<string, string> } | null
+  /** the True-cost panel beside the property card (property id), null = closed */
+  costOpen: number | null
+  /** the Flood-exposure panel beside the property card (property id), null = closed */
+  floodOpen: number | null
   /** the full property card (evidence / tests) instead of the one-glance panel */
   cardDetail: boolean
   shortlist: number[]
@@ -122,6 +126,8 @@ export const useStore = create<State>((set, get) => ({
   visibleIds: [],
   buyerProfile: null,
   curated: null,
+  costOpen: null,
+  floodOpen: null,
   cardDetail: false,
   shortlist: loadShortlist(),
   lastTest: {},

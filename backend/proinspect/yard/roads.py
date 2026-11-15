@@ -38,6 +38,33 @@ def ways(lat0, lon0, half_m):
     return out
 
 
+def _overpass(q):
+    """POST an Overpass query with retries and a mirror (public servers 502 at times)."""
+    err = None
+    for url in (OVERPASS, OVERPASS, "https://overpass.kumi.systems/api/interpreter"):
+        try:
+            r = httpx.post(url, data={"data": q}, timeout=40,
+                           headers={"User-Agent": "proinspect-hackathon/1.0 (flood exposure)"})
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            err = e
+            time.sleep(2)
+    raise err
+
+
+@cached("osm")
+def waterways(lat0, lon0, half_m):
+    """OSM waterways (rivers, bayous/streams, canals, drains) in a box: [{id, name, kind, nodes:[(lat, lon)...]}]."""
+    d_lat = half_m / 111320.0
+    d_lon = half_m / (111320.0 * math.cos(math.radians(lat0)))
+    bbox = f"{lat0 - d_lat:.6f},{lon0 - d_lon:.6f},{lat0 + d_lat:.6f},{lon0 + d_lon:.6f}"
+    q = f'[out:json][timeout:25];way["waterway"~"^(river|stream|canal|drain)$"]({bbox});out tags geom;'
+    return [{"id": e["id"], "name": e.get("tags", {}).get("name"), "kind": e.get("tags", {}).get("waterway"),
+             "nodes": [(g["lat"], g["lon"]) for g in e["geometry"]]}
+            for e in _overpass(q).get("elements", []) if e.get("type") == "way" and len(e.get("geometry") or []) >= 2]
+
+
 @cached("osm")
 def buildings(lat0, lon0, half_m):
     """OSM building polygons (closed ways) in a box: [{id, tags, nodes:[(lat, lon)...]}]."""

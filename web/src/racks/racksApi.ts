@@ -60,7 +60,7 @@ export interface InteriorPlan extends Omit<RackPlan, 'rows' | 'equipment' | 'equ
 }
 export interface Operation { key: string; name: string; why: string; machine: string }
 /** Where a dimension comes from. Never present an assumed value as a measurement. */
-export type DimSource = 'measured' | 'assumed' | 'calculated' | 'yours'
+export type DimSource = 'measured' | 'assumed' | 'calculated' | 'yours' | 'recorded' | 'estimate' | 'unknown'
 export interface Dim { value: number | null; unit: string; source: DimSource; basis?: string }
 export interface PalletInput { preset?: string; width_in: number; depth_in: number; load_in: number }
 export interface PalletSpec extends PalletInput {

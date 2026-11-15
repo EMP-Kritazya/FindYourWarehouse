@@ -11,6 +11,9 @@ import { AVAIL_LABEL, fmtKSF, isNum } from '../lib/format'
 import { Skeleton, useAsync } from './ui'
 import { GradeChip, useYardVerdict } from './YardVerdict'
 import { useStorage } from '../racks/StorageSummary'
+import { money, useCost } from '../economics/useCost'
+import { useCostOperation } from '../economics/CostPanel'
+import { useFlood } from '../flood/FloodPanel'
 
 const FIT: Record<Fit, { label: string; cls: string }> = {
   pass: { label: 'Fits your deal-breakers', cls: 'bg-good/15 text-good ring-good/30' },
@@ -87,6 +90,9 @@ function Side({ id, other, letter, c }: { id: number; other: number; letter: str
   const openTest = useStore((s) => s.openTest)
   const yard = useYardVerdict(id), yardO = useYardVerdict(other)
   const inside = useStorage(id), insideO = useStorage(other)
+  const costOp = useCostOperation()
+  const cost = useCost(id, costOp), costO = useCost(other, costOp)
+  const fl = useFlood(id).f, flO = useFlood(other).f
   const cand = c?.candidates.find((x) => x.id === id)
   const fit = c?.fit[String(id)]
   const rec = c?.recommendation.id === id
@@ -115,8 +121,20 @@ function Side({ id, other, letter, c }: { id: number; other: number; letter: str
     if (isNum(m1) && isNum(m2) && Math.abs(m1 - m2) / Math.max(m1, m2) >= 0.1) {
       ;(m1 < m2 ? pros : cons).push({ text: 'Dock-to-rack trip', detail: `${m1.toFixed(1)} vs ${m2.toFixed(1)} min/pallet`, est: true })
     }
+    // true cost per pallet: only when both are known and differ by > 10% (an estimate stays marked est.)
+    const p1 = cost?.per_position_month.value, p2 = costO?.per_position_month.value
+    if (isNum(p1) && isNum(p2) && Math.abs(p1 - p2) / Math.max(p1, p2) > 0.1) {
+      const est = [cost, costO].some((x) => !x || x.per_position_month.rough || !['asking', 'own'].includes(x.rent.tier))
+      ;(p1 < p2 ? pros : cons).push({ text: 'Cost per pallet / month', detail: `${money(p1, 2)} vs ${money(p2, 2)}`, est })
+    }
+    // flood exposure: only when both are computed and neither is 'not enough data'
+    const RANK: Record<string, number> = { lower: 0, moderate: 1, higher: 2 }
+    const l1 = fl?.indicator?.level, l2 = flO?.indicator?.level
+    if (l1 && l2 && l1 in RANK && l2 in RANK && RANK[l1] !== RANK[l2]) {
+      ;(RANK[l1] < RANK[l2] ? pros : cons).push({ text: 'Flood exposure', detail: `${fl!.indicator!.label.toLowerCase()} vs ${flO!.indicator!.label.toLowerCase()}` })
+    }
     return { pros, cons, unknown }
-  }, [c, id, other, yard.v, yardO.v, inside, insideO])
+  }, [c, id, other, yard.v, yardO.v, inside, insideO, cost, costO, fl, flO])
 
   return (
     <article className={clsx('flex min-w-0 flex-col gap-2.5 rounded-xl bg-panel-2/70 p-2.5 ring-1', rec ? 'ring-accent/60' : 'ring-line')} data-testid={`duel-${letter}`}>

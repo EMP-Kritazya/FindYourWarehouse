@@ -9,6 +9,8 @@ import DraggableDock from './components/DraggableDock'
 import WarehouseCard, { bestScan, loadDetail, loadTwin } from './components/WarehouseCard'
 import CompareView from './components/CompareView'
 import CompareDuel from './components/CompareDuel'
+import CostPanel from './economics/CostPanel'
+import FloodPanel from './flood/FloodPanel'
 import MapControls from './components/MapControls'
 import Stage from './components/Stage'
 import ErrorBoundary from './components/ErrorBoundary'
@@ -66,6 +68,9 @@ export function useUiCommands() {
         if (ids.length) useStore.setState({ curated: { title: String(a.title ?? 'Results'), ids: ids.slice(0, 10), values: a.values ?? undefined }, ranking: null })
         break
       }
+      case 'showFlood':
+        if (Number.isFinite(id)) { if (s.selectedId !== id) s.select(id); useStore.setState({ floodOpen: id, costOpen: null }) }
+        break
       case 'closeCompare':
         s.showCompare(false)
         break
@@ -276,6 +281,8 @@ export default function App() {
       ) : <WarehouseCard key={selectedId ?? 'none'} />}
       <CompareView />
       <CompareDuel />
+      <CostPanel />
+      <FloodPanel />
       <Stage />
       {interiorOpen && (
         <ErrorBoundary fallback={null}>

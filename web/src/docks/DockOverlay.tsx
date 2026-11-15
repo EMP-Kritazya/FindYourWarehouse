@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import clsx from 'clsx'
 import { Check, Loader2, PencilRuler, X } from 'lucide-react'
 import { PathLayer, PolygonLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
+import { CollisionFilterExtension } from '@deck.gl/extensions'
 import { create } from 'zustand'
 import { useStore } from '../lib/store'
 import { mapApi } from '../lib/mapApi'
@@ -97,6 +98,11 @@ export function useDockLayers(selectedId: number | null) {
         },
         getText: (d: DockDoor) => d.label ?? d.id, getSize: 11, getColor: [232, 236, 242, 255], background: true,
         getBackgroundColor: [10, 13, 18, 200], backgroundPadding: [3, 1], fontFamily: 'JetBrains Mono, monospace', fontWeight: 600,
+        // dense docks (100+ doors on one wall): hide labels that would overlap; zooming in reveals them.
+        // Priority: doors a person confirmed, then doors seen on the aerials, then inferred ones.
+        extensions: [new CollisionFilterExtension()], collisionEnabled: true, collisionGroup: 'dock-labels',
+        getCollisionPriority: (d: DockDoor) => (d.status === 'confirmed' || d.status === 'user_added' ? 100 : d.status === 'inferred' ? 0 : 50),
+        collisionTestProps: { sizeScale: 1.6 },   // keep a little air between labels
       }),
       store.gate ? new ScatterplotLayer({
         id: 'dko-gate', data: [store.gate], getPosition: (g: { lon: number; lat: number }) => [g.lon, g.lat], radiusUnits: 'pixels', getRadius: 6,
@@ -169,16 +175,23 @@ export function DockProofPopup() {
       const cw = map.getContainer().clientWidth
       const lo = 376 + 8 + 150, hi = cw - 456 - 8 - 150
       const x = Math.min(Math.max(p.x, lo), Math.max(lo, hi))
-      // above the door when there is room under the search bar, else below it
-      const below = p.y - el.offsetHeight - 14 < 140
-      el.style.transform = `translate(${Math.round(x)}px, ${Math.round(p.y)}px) translate(-50%, ${below ? '18px' : 'calc(-100% - 14px)'})`
+      // above the door if it fits under the search bar, else below it; then kept fully on screen
+      const ch = map.getContainer().clientHeight
+      el.style.maxHeight = `${ch - 16}px`
+      const h = el.offsetHeight
+      const above = p.y - h - 14 >= 140
+      const want = above ? p.y - h - 14 : p.y + 18
+      const top = Math.max(8, Math.min(ch - h - 8, want))
+      el.style.transform = `translate(${Math.round(x)}px, ${Math.round(top)}px) translate(-50%, 0)`
       const stem = el.querySelector<HTMLElement>('[data-stem]')
-      if (stem) stem.style.display = below ? 'none' : ''
+      if (stem) stem.style.display = above && Math.abs(top - want) < 2 ? '' : 'none'   // the stem only when it still points at the door
       el.style.opacity = '1'
     }
     place()
     m?.on('move', place); m?.on('resize', place)
-    return () => { m?.off('move', place); m?.off('resize', place) }
+    const ro = typeof ResizeObserver !== 'undefined' && ref.current ? new ResizeObserver(place) : null   // re-place when the photo loads
+    if (ro && ref.current) ro.observe(ref.current)
+    return () => { m?.off('move', place); m?.off('resize', place); ro?.disconnect() }
   }, [anchor])
   useEffect(() => { if (popup && popup.pid !== selectedId) useDockOverlay.getState().setPopup(null) }, [selectedId, popup])
 
@@ -198,7 +211,7 @@ export function DockProofPopup() {
   const conf = Math.max(0, ...door.evidence.map((e) => e.conf ?? 0))
   return (
     <div ref={ref} className="pointer-events-auto absolute left-0 top-0 z-[45] w-[300px] opacity-0" data-testid="dock-proof">
-      <div className="glass fade-up overflow-hidden rounded-xl">
+      <div className="glass fade-up scroll-thin max-h-[inherit] overflow-y-auto rounded-xl">
         <div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
           <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: `rgb(${(DOOR_KIND_RGB[door.kind] ?? DOOR_KIND_RGB.unknown).join(' ')})` }} />
           <span className="font-mono text-[13px] font-semibold" title={door.id}>{door.label ?? door.id}</span>

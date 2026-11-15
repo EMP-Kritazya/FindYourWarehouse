@@ -573,3 +573,57 @@ vegetation attributes, roadway intelligence, semantic embeddings.
     - the greeting focuses with `preventScroll`;
     - DraggableDock clamps fully on screen on load, resize and size change.
   - **Rule:** never use `scrollIntoView` / `autoFocus` in overlays.
+- **Door popup + analyst drag (2026-11-15):**
+  - **Door popup:** placed above the door (else below), then clamped fully on screen, with max-height and an internal
+    scroll. It re-places on resize (ResizeObserver), because the proof photo loads after the first placement.
+  - **DraggableDock:**
+    - the drag offset is measured from the VISIBLE content (default layout right-aligns it in the 380 px box; when
+      moved it is left-aligned);
+    - the clamp uses the content bounds, so the collapsed pill and orb can reach the screen edge.
+- **Wrong-parcel docks fixed (2026-11-15):**
+  - **Fallback:** `docks.osm_footprint` + `roads.buildings` (Overpass, cached, retries plus a mirror). When the
+    exterior twin has `parcel_mismatch`, the dock build uses the OSM building under CoStar's point (≤ 60 m away,
+    footprint × stories 0.6–1.6× CoStar). Sets `store.footprint_source = "osm"` and a note.
+  - **15550 Milner Rd (11175666):**
+    - before: 0 doors, because the search ran on two 16,777 SF sheds;
+    - now: OSM way 1544621969 (1,205,372 SF) → 89 seen on aerials + 39 inferred (CoStar 194).
+    - Only the dock store uses it; the yard test still uses the exterior twin's parcel.
+  - **Door labels:** deck.gl `CollisionFilterExtension` (`@deck.gl/extensions` 9.4.1, now in package.json). Priority:
+    confirmed > seen > inferred.
+- **Wrong parcel fixed at the source (2026-11-15, supersedes the docks-only OSM fallback):**
+  - **`exterior._site`:** when the Vexcel structures are < 30% of CoStar's size, find the OSM building
+    (`_osm_building_ll`), re-query Vexcel at its centre, and otherwise use the OSM outline. The property area always
+    contains the outline + 40 m.
+    `vexcel_profile._site` delegates to it, so the twin, yard, docks and profile share one parcel.
+  - **Window:** the frame cap is 420 m (was 250).
+  - **`_fix_swallowed_roof`:** when the ground model takes a giant flat roof for ground (the footprint reads < 2 m
+    tall), the ground is refitted as a plane from the lower 40% of the DSM.
+  - **`_snap_to_roof`:** the OSM outline is snapped to the measured roof blob (the OSM outline sat about 6 m inside the
+    real roof edge).
+  - **`_vehicles`:** tiled over 280 m tiles (one 840 m call found 0 trailers; tiled: 43 trucks, 570 cars).
+  - **15550 Milner Rd results:**
+    - footprint 1,220,667 SF vs CoStar 1,230,097;
+    - doors 178 seen on aerials + 26 inferred (CoStar 194);
+    - 5-semi yard test 0/5 → 4/5 in 14.2 min (1 is a planner limit).
+- **The Yard test button only opens the test** (PropertyHud `openYard`). The "Yard · 5 semis" tile's Run is the
+  explicit standard check.
+- **Dimensions + pallet (2026-11-15):**
+  - **Pallet input:** `interior.pallet_spec` + body `pallet` {preset, width_in, depth_in, load_in}. Presets: GMA
+    48×40 (default, ASSUMED), 42×42, 48×48, Euro 1200×800 (3 per bay). It derives:
+    - frame depth = pallet depth − 6 in;
+    - bay = per_bay × width + clearances (default reproduces 42 in / 8.25 ft);
+    - level pitch = load + 12 in.
+  - **Load-aware levels:** `generate(load_ft=)` makes the top load (top beam + load) stay under clear − sprinkler.
+    The old rule ignored the load: at 12896757 it gave 6 levels with the top load at 32 ft over a 29.2 ft limit.
+    3PL capacity there is now **4,230** (5 levels), not 5,076.
+    `racks.py` / sim keep the old rule (no load_ft).
+  - **Provenance:** `plan()` returns `dims` (each value {value, unit, source: measured|assumed|calculated|yours,
+    basis}), `feasibility` (6 checks) and `machine_pos`. The pallet source is part of the cache key.
+  - **UI:**
+    - `racks/PlanProps.tsx`: selection kinds row / obj / zone / lane / col / machine / pallet / bay / building /
+      aisle; the properties panel with source tags; `BayElevation`.
+    - `RackPlan`: everything selectable when `dims` is passed (objects select, keep/remove moved into the panel); a
+      to-scale forklift; dimension lines (solid = measured, dashed amber ≈ = assumed / calculated).
+    - `InteriorWorkspace`: `PalletBar` (presets, W / D / load, debounced) + spec chips + layout checks.
+  - **Object heights** are only measured bounds (< 6.6 ft, or full height ≥ deck − 4.9 ft); exact tops are not
+    extracted.

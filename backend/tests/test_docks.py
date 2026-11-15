@@ -295,3 +295,20 @@ def test_proof_image_draws_with_mocked_vexcel(tmp_path, monkeypatch):
     assert g > 150 and b > 150 and r < 150
     docks.proof_image(1, "c1", "k1")
     assert len(calls) == 1                                                  # rendered once
+
+
+def test_osm_footprint_replaces_a_wrong_parcel(monkeypatch):
+    """Vexcel parcel at the CoStar point is the wrong one: use the OSM building under the point when its size matches."""
+    from proinspect import docks as D
+    from proinspect.yard import roads
+    lat0, lon0 = 29.94, -95.33
+    dlat, dlon = 100 / 111320.0, 150 / (111320.0 * 0.866)          # ~200 m x 300 m = 60,000 m2 ~ 646k SF
+    big = [(lat0 - dlat, lon0 - dlon), (lat0 - dlat, lon0 + dlon), (lat0 + dlat, lon0 + dlon), (lat0 + dlat, lon0 - dlon),
+           (lat0 - dlat, lon0 - dlon)]
+    shed = [(lat0 + 0.004, lon0), (lat0 + 0.004, lon0 + 0.0002), (lat0 + 0.0042, lon0 + 0.0002), (lat0 + 0.004, lon0)]
+    monkeypatch.setattr(roads, "buildings", lambda *a, **k: [{"id": 1, "tags": {}, "nodes": shed},
+                                                            {"id": 2, "tags": {}, "nodes": big}])
+    twin = {"frame": {"lat0": lat0, "lon0": lon0}}
+    fp = D.osm_footprint(twin, {"lat": lat0, "lon": lon0, "rba_sqft": 640000, "stories": 1})
+    assert fp and fp["source"].endswith("way 2") and 0.9 < fp["footprint_sqft"] / 646000 < 1.1
+    assert D.osm_footprint(twin, {"lat": lat0, "lon": lon0, "rba_sqft": 50000, "stories": 1}) is None   # size mismatch

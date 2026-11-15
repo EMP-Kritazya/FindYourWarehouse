@@ -2,13 +2,14 @@
 // they edit; the Matterport scan (right) shows the same plan live, with real-looking racks and a forklift trip.
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import clsx from 'clsx'
-import { Info, Loader2, Play, RotateCcw, Trash2, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Check, Info, Loader2, Play, RotateCcw, X } from 'lucide-react'
 import { useStore } from '../lib/store'
 import { api } from '../lib/api'
 import EquipmentGlyph, { type EquipItem } from '../components/EquipmentGlyph'
 import type { SimScene } from '../matterport/types'
 import RackPlan from './RackPlan'
-import { interiorApi, type InteriorPlan, type Operation, type RackEdits } from './racksApi'
+import { interiorApi, PALLET_PRESETS, type InteriorPlan, type Operation, type PalletInput, type RackEdits } from './racksApi'
+import { fmtDim, fmtFt, PropertiesPanel, selKind, SrcTag } from './PlanProps'
 
 const MatterportStage = lazy(() => import('../matterport/MatterportStage'))
 const MACHINES = ['counterbalance_electric', 'reach_truck', 'vna_turret', 'order_picker']
@@ -32,12 +33,29 @@ export default function InteriorWorkspace({ open, onClose }: { open: InteriorOpe
   const [err, setErr] = useState('')
   const [sel, setSel] = useState<string | null>(null)
   const [trip, setTrip] = useState(false)
+  // the buyer's pallet: null = the US standard (an ASSUMPTION, labelled as such); applied after a short pause
+  const [pallet, setPallet] = useState<PalletInput | null>(null)
+  const [palletDraft, setPalletDraft] = useState<PalletInput>({ preset: 'gma_48x40', width_in: 40, depth_in: 48, load_in: 54 })
+  useEffect(() => {
+    const t = setTimeout(() => {
+      const d = palletDraft
+      const isDefault = d.preset === 'gma_48x40' && d.width_in === 40 && d.depth_in === 48 && d.load_in === 54
+      const valid = d.width_in >= 24 && d.width_in <= 60 && d.depth_in >= 24 && d.depth_in <= 60 && d.load_in >= 12 && d.load_in <= 96
+      if (valid) setPallet((p) => (isDefault ? null : p && p.width_in === d.width_in && p.depth_in === d.depth_in && p.load_in === d.load_in ? p : { ...d }))
+    }, 450)
+    return () => clearTimeout(t)
+  }, [palletDraft])
+  useEffect(() => {                                     // Esc clears the selection
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape' && sel) { e.stopPropagation(); setSel(null) } }
+    window.addEventListener('keydown', k, true)
+    return () => window.removeEventListener('keydown', k, true)
+  }, [sel])
 
   useEffect(() => { interiorApi.operations().then(setOps).catch(() => {}); api.library().then((l) => setLib(l.equipment as Record<string, EquipItem>)).catch(() => {}) }, [])
   useEffect(() => {
     let live = true
     setBusy(true); setErr('')
-    interiorApi.plan(open.pid, { operation, machine, keep, zone_types: zoneTypes, edits })
+    interiorApi.plan(open.pid, { operation, machine, keep, zone_types: zoneTypes, edits, pallet })
       .then(async (p) => {
         if (!live) return
         setPlan(p)
@@ -48,14 +66,20 @@ export default function InteriorWorkspace({ open, onClose }: { open: InteriorOpe
       .catch((e) => { if (live) setErr(String(e.message ?? e)) })
       .finally(() => { if (live) setBusy(false) })
     return () => { live = false }
-  }, [open.pid, operation, machine, keep, zoneTypes, edits])
+  }, [open.pid, operation, machine, keep, zoneTypes, edits, pallet])
 
   const reset = (fn: () => void) => { setEdits({}); setSel(null); fn() }
   const move = useCallback((rid: string, dx: number) => setEdits((e) => ({ ...e, moved: { ...(e.moved ?? {}), [rid]: Math.round(((e.moved?.[rid] ?? 0) + dx) * 100) / 100 } })), [])
   const toggleRow = (rid: string) => setEdits((e) => { const d = new Set(e.deleted ?? []); if (d.has(rid)) d.delete(rid); else d.add(rid); return { ...e, deleted: [...d] } })
   const toggleObj = (oid: string) => setKeep((k) => { const s = new Set(k ?? []); if (s.has(oid)) s.delete(oid); else s.add(oid); return [...s] })
   const pr = plan?.proofs
-  const row = plan?.rows.find((r) => r.id === sel) ?? null
+  const onAction = () => {
+    if (!sel) return
+    const k = selKind(sel)
+    if (k === 'row') toggleRow(sel)
+    else if (k === 'obj') toggleObj(sel.slice(4))
+  }
+  const fails = plan?.feasibility?.filter((f) => !f.ok) ?? []
   // the stage shows the plan; the forklift trip only when asked (so the racks read first)
   const shown = scene ? (trip ? scene : { ...scene, vehicles: [], duration_s: 0 }) : null
 
@@ -120,20 +144,39 @@ export default function InteriorWorkspace({ open, onClose }: { open: InteriorOpe
               </div>
             </>
           )}
+          {plan?.dims && (
+            <PalletBar draft={palletDraft} setDraft={setPalletDraft} plan={plan} busy={busy} onSelect={setSel} sel={sel} />
+          )}
+          {plan?.feasibility && (
+            <details className="rounded-xl bg-white/[0.03] px-3 py-2 text-[12px] ring-1 ring-inset ring-line" open={fails.length > 0} data-testid="feasibility">
+              <summary className="flex cursor-pointer list-none items-center gap-2">
+                {fails.length ? <AlertTriangle size={14} className="text-warn" /> : <Check size={14} className="text-good" />}
+                <span className="font-medium text-ink">{fails.length ? `${fails.length} layout check${fails.length > 1 ? 's' : ''} need attention` : `All ${plan.feasibility.length} layout checks pass`}</span>
+                <span className="ml-auto text-[11px] text-ink-3">details</span>
+              </summary>
+              <ul className="mt-1.5 space-y-1">
+                {plan.feasibility.map((f) => (
+                  <li key={f.id} className="flex items-start gap-1.5 leading-snug">
+                    {f.ok ? <Check size={12} className="mt-0.5 shrink-0 text-good" /> : <AlertTriangle size={12} className="mt-0.5 shrink-0 text-warn" />}
+                    <span><span className="text-ink">{f.label}</span> <span className="text-ink-3">· {f.detail}</span></span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
           {plan && (
             <>
-              <RackPlan plan={plan as never} selected={sel} onSelect={setSel} onMove={move} objects={plan.objects} onToggleObject={toggleObj} zones={plan.zones} />
-              <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
-                {row ? (
-                  <>
-                    <span className="font-mono text-ink-2">{row.id}</span>
-                    <span className="text-ink-3">{row.bays} bays · {row.slots} positions{row.trip_m != null ? ` · ${row.trip_m} m from the docks` : ''}</span>
-                    <button onClick={() => toggleRow(row.id)} className="flex items-center gap-1 rounded-md px-1.5 py-1 text-bad ring-1 ring-inset ring-bad/30 hover:bg-bad/10">
-                      {row.deleted ? <><Undo2 size={12} /> Restore</> : <><Trash2 size={12} /> Remove row</>}
-                    </button>
-                    {!row.deleted && row.ok === false && <span className="text-bad">{row.why}</span>}
-                  </>
-                ) : <span className="text-ink-3">Click a rack row to select (drag it sideways or remove it). Grey boxes = today's contents you keep; red dashed = removed (click to toggle). Teal selective · violet double-deep · amber pick shelving; red = your machine can't reach it.</span>}
+              <div className="relative">
+                <RackPlan plan={plan as never} selected={sel} onSelect={setSel} onMove={move} objects={plan.objects} onToggleObject={toggleObj} zones={plan.zones}
+                  dims={plan.dims} machinePos={plan.machine_pos} loadIn={plan.pallet?.load_in} />
+                {sel && plan.dims && (
+                  <div className="pointer-events-none absolute bottom-2 right-2 top-2 z-10 flex flex-col"><div className="scroll-thin pointer-events-auto min-h-0 overflow-y-auto rounded-xl"><PropertiesPanel sel={sel} plan={plan} onClose={() => setSel(null)} onAction={onAction} /></div></div>
+                )}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-ink-3">
+                <span>Click anything on the plan for its dimensions. Drag a selected rack row sideways to move it.</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-0 w-4 border-t-2 border-[#e6fffb]" /> measured</span>
+                <span className="flex items-center gap-1"><span className="inline-block h-0 w-4 border-t-2 border-dashed border-[#fbbf24]" /> ≈ assumed or calculated</span>
                 {(Object.keys(edits.moved ?? {}).length + (edits.deleted?.length ?? 0)) > 0 && (
                   <button onClick={() => { setEdits({}); setSel(null) }} className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-ink-3 ring-1 ring-inset ring-line hover:bg-white/5"><RotateCcw size={12} /> Auto layout</button>
                 )}
@@ -170,6 +213,57 @@ function M({ label, v, sub, tone }: { label: string; v: string; sub?: string; to
       <div className="text-[11px] uppercase tracking-[0.06em] text-ink-3">{label}</div>
       <div className={clsx('text-[18px] font-semibold tabular-nums', tone === 'warn' ? 'text-warn' : tone === 'good' ? 'text-good' : 'text-ink')}>{v}</div>
       {sub && <div className="truncate text-[11px] text-ink-3">{sub}</div>}
+    </div>
+  )
+}
+
+/** The buyer's pallet + the rack spec it implies, as clickable chips (each opens its properties). */
+function PalletBar({ draft, setDraft, plan, busy, onSelect, sel }: {
+  draft: PalletInput; setDraft: (f: (d: PalletInput) => PalletInput) => void; plan: InteriorPlan; busy: boolean
+  onSelect: (s: string) => void; sel: string | null
+}) {
+  const D = plan.dims
+  const preset = PALLET_PRESETS.find((p) => p.key === draft.preset)
+  const num = (k: 'width_in' | 'depth_in' | 'load_in', label: string, min: number, max: number) => (
+    <label className="flex items-center gap-1 text-[11px] text-ink-3">{label}
+      <input type="number" inputMode="decimal" min={min} max={max} step={1} value={draft[k]} aria-label={`Pallet ${label} in inches`}
+        onChange={(e) => { const v = Number(e.target.value); setDraft((d) => ({ ...d, [k]: v, ...(k !== 'load_in' ? { preset: 'custom' } : {}) })) }}
+        className={clsx('h-7 w-[58px] rounded-md bg-panel-2 px-1.5 text-right text-[12px] tabular-nums text-ink ring-1 ring-inset',
+          draft[k] < min || draft[k] > max ? 'ring-bad/60' : 'ring-line')} />
+      <span>in</span>
+    </label>
+  )
+  const chip = (id: string, label: string, value: string, src: Parameters<typeof SrcTag>[0]['s']) => (
+    <button key={id} onClick={() => onSelect(id)} data-testid={`spec-${id}`}
+      className={clsx('flex items-center gap-1.5 rounded-lg px-2 py-1 text-left text-[11.5px] ring-1 ring-inset transition',
+        sel === id ? 'bg-accent/12 ring-accent/50' : 'bg-white/[0.03] ring-line hover:bg-white/[0.06]')}>
+      <span className="text-ink-3">{label}</span><span className="font-semibold tabular-nums text-ink">{value}</span><SrcTag s={src} />
+    </button>
+  )
+  const isDefault = draft.preset === 'gma_48x40' && draft.width_in === 40 && draft.depth_in === 48 && draft.load_in === 54
+  return (
+    <div className="rounded-xl bg-white/[0.03] p-2.5 ring-1 ring-inset ring-line" data-testid="pallet-bar">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-3">Your pallet</span>
+        <select value={preset ? draft.preset : 'custom'} aria-label="Pallet size"
+          onChange={(e) => { const p = PALLET_PRESETS.find((x) => x.key === e.target.value); if (p) setDraft((d) => ({ ...d, preset: p.key, width_in: p.width_in, depth_in: p.depth_in })) }}
+          className="h-7 rounded-md bg-panel-2 px-1.5 text-[12px] text-ink ring-1 ring-inset ring-line">
+          {PALLET_PRESETS.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+          <option value="custom">Custom size</option>
+        </select>
+        {num('width_in', 'W', 24, 60)}{num('depth_in', 'D', 24, 60)}{num('load_in', 'Load H', 12, 96)}
+        {busy && <Loader2 size={13} className="animate-spin text-ink-3" />}
+        {!isDefault && <button onClick={() => setDraft(() => ({ preset: 'gma_48x40', width_in: 40, depth_in: 48, load_in: 54 }))}
+          className="ml-auto flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] text-ink-3 ring-1 ring-inset ring-line hover:bg-white/5"><RotateCcw size={11} /> US standard</button>}
+      </div>
+      {plan.pallet.source === 'assumed' && <div className="mt-1 text-[11px] text-warn/90">Using the US standard pallet (48 × 40 in, 54 in load) as an assumption. Set yours to see your real capacity.</div>}
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {chip('pallet', 'Pallet', `${plan.pallet.depth_in}×${plan.pallet.width_in}×${plan.pallet.load_in} in`, plan.pallet.source === 'yours' ? 'yours' : 'assumed')}
+        {chip('bay', 'Bay', `${fmtFt(D.rack.bay_width.value, 2)} · ${D.rack.levels.value} levels @ ${fmtFt(D.rack.level_pitch.value, 2)}`, 'calculated')}
+        {chip('building', 'Clear height', fmtDim(D.building.clear_height), 'measured')}
+        {chip('machine', D.machine.name, `${fmtDim(D.machine.length)} × ${fmtDim(D.machine.width)}`, 'assumed')}
+        {chip('aisle', 'Aisle', fmtDim(D.aisle), 'assumed')}
+      </div>
     </div>
   )
 }

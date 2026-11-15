@@ -38,7 +38,10 @@ export default function PropertyHud({ id, pin, w, twin, result, excluded, ranked
   const yv = yard.v?.status === 'computed' ? yard.v : null
   const iv = inside?.status === 'computed' ? inside : null
 
+  // the standard 5-semi check (the tile): replays a cached run instantly, else runs it
   const yardTest = () => (window as unknown as { __proinspectUi?: (c: string, a: unknown) => void }).__proinspectUi?.('yardTest', { id, trucks: [{ type: 'semi_53', count: 5 }] })
+  // the Yard test BUTTON only opens the test: the buyer picks the trucks, nothing runs until they press Run
+  const openYard = () => { useStore.getState().openTest(id, 'yard'); useStore.setState({ docksOpen: null }) }
   const planner = () => plannable && scan && useStore.setState({ interiorOpen: { pid: id, modelId: scan.model_id, title: pin.address } })
   // any scan can be WALKED, even one too small to plan on (the planner needs a measured warehouse floor)
   const tour = scan ?? [...(w?.scans ?? [])].sort((a, b) => ((b as { floor_sqft?: number }).floor_sqft ?? 0) - ((a as { floor_sqft?: number }).floor_sqft ?? 0))[0] ?? null
@@ -91,7 +94,7 @@ export default function PropertyHud({ id, pin, w, twin, result, excluded, ranked
         )}
 
         <div className="grid grid-cols-3 gap-1.5">
-          <Action icon={<Truck size={15} />} label="Yard test" onClick={yardTest} />
+          <Action icon={<Truck size={15} />} label="Yard test" onClick={openYard} />
           <Action icon={<Layers3 size={15} />} label="Interior planner" onClick={planner} disabled={!plannable} primary />
           <Action icon={<Box size={15} />} label="Walk inside" onClick={walk} disabled={!tour} />
         </div>

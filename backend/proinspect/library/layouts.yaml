@@ -4,7 +4,7 @@
 operations:
   pallet_3pl:
     machine: reach_truck
-    why: "3PL pallet storage: selective rack so every client's pallet is reachable without moving others; reach trucks for 9 ft aisles and 6 levels."
+    why: "3PL pallet storage: selective rack so every client's pallet is reachable without moving others; reach trucks for 9 ft aisles; levels follow the measured clear height and your pallet."
     zones:
       - {type: selective, from: 0.0, to: 1.0, why: "pallet storage across the whole floor"}
   auto_parts:

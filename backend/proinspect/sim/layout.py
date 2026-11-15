@@ -68,7 +68,8 @@ def putaway_vehicle(fleet):
 
 
 def generate(site: Site, fleet: dict, sprinkler_ft: float = SPRINKLER_FT, dock_zone=True, *, place_mask=None,
-             rack_d=None, bay=None, level_ft=None, aisle_m=None, deep=1, max_levels=None, lanes_on=True):
+             rack_d=None, bay=None, level_ft=None, aisle_m=None, deep=1, max_levels=None, lanes_on=True,
+             load_ft=None):
     """Optional overrides (all default to selective pallet rack): place_mask = racks only where True (aisles and
     travel may use the whole floor); rack_d / bay (m) frame depth and bay width; level_ft per level; aisle_m; deep =
     pallets per bay face in depth (2 = double-deep); max_levels caps levels (shelving); lanes_on = staging lanes."""
@@ -77,8 +78,13 @@ def generate(site: Site, fleet: dict, sprinkler_ft: float = SPRINKLER_FT, dock_z
     pv = putaway_vehicle(fleet)
     aisle = aisle_m or (eq[pv]["min_aisle_ft"] if pv else 12.0) * FT
     lift = eq[pv]["lift_height_ft"] if pv else 15
-    levels = max(1, min(int((site.clear_height_ft - sprinkler_ft) // LEVEL_) + 1,
-                        int(lift // LEVEL_) + 1))
+    if load_ft is not None:
+        # load-aware: the TOP load (top beam + load height) must stay below the sprinkler clearance line
+        room = site.clear_height_ft - sprinkler_ft - load_ft
+        levels = 0 if room < 0 else min(int(room // LEVEL_) + 1, int(lift // LEVEL_) + 1)
+    else:
+        levels = max(1, min(int((site.clear_height_ft - sprinkler_ft) // LEVEL_) + 1,
+                            int(lift // LEVEL_) + 1))
     if max_levels:
         levels = min(levels, max_levels)
 

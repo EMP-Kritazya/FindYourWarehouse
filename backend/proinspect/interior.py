@@ -94,6 +94,42 @@ def objects(site, transposed, model_id):
     return out, masks
 
 
+# ------------------------------------------------------------------ pallet -> rack spec
+PALLET_PRESETS = {                     # width x depth (in): depth is the side that goes INTO the rack
+    "gma_48x40": {"name": "GMA 48 x 40 in (US standard)", "width_in": 40, "depth_in": 48},
+    "42x42": {"name": "42 x 42 in (paint, drums)", "width_in": 42, "depth_in": 42},
+    "48x48": {"name": "48 x 48 in (drums, bulk)", "width_in": 48, "depth_in": 48},
+    "euro_1200x800": {"name": "Euro 1200 x 800 mm", "width_in": 31.5, "depth_in": 47.2},
+}
+DEFAULT_PALLET = {"preset": "gma_48x40", "width_in": 40, "depth_in": 48, "load_in": 54}
+OVERHANG_IN = 3.0          # a pallet overhangs the frame 3 in front and back
+BAY_CLEAR_IN = 19.0 / 3    # clearance between pallets / uprights in a bay (99 in bay for two 40 in pallets)
+LIFT_BEAM_IN = 12.0        # lift-off + beam depth added to the load height per level (54 in load -> 5.5 ft)
+
+
+def pallet_spec(pallet):
+    """The buyer's pallet (or the US default) -> rack geometry. Everything here is a standard-practice ASSUMPTION
+    (or the buyer's own input), never a measurement."""
+    p = {**DEFAULT_PALLET, **{k: v for k, v in (pallet or {}).items() if v not in (None, "")}}
+    if p.get("preset") in PALLET_PRESETS and not any(k in (pallet or {}) for k in ("width_in", "depth_in")):
+        p.update({k: PALLET_PRESETS[p["preset"]][k] for k in ("width_in", "depth_in")})
+    w, d, h = (float(p[k]) for k in ("width_in", "depth_in", "load_in"))
+    if not (24 <= w <= 60 and 24 <= d <= 60 and 12 <= h <= 96):
+        raise ValueError("pallet must be 24-60 in wide and deep, with a load 12-96 in tall")
+    per_bay = 3 if w <= 32 else 2
+    bay_in = per_bay * w + (per_bay + 1) * BAY_CLEAR_IN
+    custom = pallet is not None and (p.get("preset") not in PALLET_PRESETS or
+                                     float(pallet.get("width_in", w)) != PALLET_PRESETS.get(p.get("preset"), {}).get("width_in", w))
+    return {"preset": p.get("preset") if p.get("preset") in PALLET_PRESETS else "custom",
+            "name": PALLET_PRESETS.get(p.get("preset"), {}).get("name", f"Custom {w:g} x {d:g} in"),
+            "width_in": w, "depth_in": d, "load_in": h, "per_bay": per_bay,
+            "frame_depth_in": round(d - 2 * OVERHANG_IN, 1), "bay_in": round(bay_in, 1),
+            "level_in": round(h + LIFT_BEAM_IN, 1),
+            "source": "yours" if pallet else "assumed",
+            "is_default": pallet is None or (p.get("preset") == "gma_48x40" and w == 40 and d == 48 and h == 54),
+            "custom": bool(custom)}
+
+
 # ------------------------------------------------------------------ zones
 def _zone_params(ztype, machine, eq):
     if ztype == "dense":
@@ -141,6 +177,7 @@ def _grid_graph(free2):
 
 def _proofs(site, rows, racks_mask, kept_mask, machine, eq, levels, level_ft, op, rba, transposed):
     """Reachability, trip distances, cycle time, pallets/hour and fleet size for `machine` on this floor."""
+    levels = max(levels, 1)
     from scipy.sparse.csgraph import dijkstra
 
     from proinspect.sim.layout import APRON
@@ -248,9 +285,86 @@ def _proofs(site, rows, racks_mask, kept_mask, machine, eq, levels, level_ft, op
     return proofs, example
 
 
+# ------------------------------------------------------------------ dimensions + feasibility
+def _v(value, unit, source, basis=None):
+    """One dimension with its provenance: measured (scan / CoStar record), assumed (standard spec or library), yours
+    (the buyer's input) or calculated (derived from the others)."""
+    return {"value": value, "unit": unit, "source": source, **({"basis": basis} if basis else {})}
+
+
+def _dims(site, w, pal, levels, level_ft, spr_ft, spr_note, eq, machine, aisle_m, interior_js, proofs, positions,
+          zones):
+    psrc = "yours" if pal["source"] == "yours" else "assumed"
+    clear = round(float(site.clear_height_ft), 1)
+    usable = round(clear - spr_ft, 1)
+    load_ft = pal["load_in"] / 12
+    beams = [round(i * level_ft, 1) for i in range(max(levels, 0))]
+    top_beam = beams[-1] if beams else None
+    top_load = round(top_beam + load_ft, 1) if top_beam is not None else None
+    spec = eq[machine]
+    md = spec.get("dims_ft") or {}
+    dims = {
+        "pallet": {"name": pal["name"], "preset": pal["preset"],
+                   "width": _v(pal["width_in"], "in", psrc, "the pallet's face along the rack beam"),
+                   "depth": _v(pal["depth_in"], "in", psrc, "the side that goes into the rack"),
+                   "load_height": _v(pal["load_in"], "in", psrc, "pallet + goods"),
+                   "note": "US GMA standard pallet: an assumption until you set yours" if psrc == "assumed" else
+                           "your pallet"},
+        "rack": {"frame_depth": _v(pal["frame_depth_in"], "in", "calculated", f"pallet depth - {2 * OVERHANG_IN:g} in overhang"),
+                 "bay_width": _v(round(pal["bay_in"] / 12, 2), "ft", "calculated",
+                                 f"{pal['per_bay']} pallets + clearances"),
+                 "pallets_per_bay": _v(pal["per_bay"], "", "calculated"),
+                 "level_pitch": _v(round(level_ft, 2), "ft", "calculated",
+                                   f"load {pal['load_in']:g} in + {LIFT_BEAM_IN:g} in lift-off and beam"),
+                 "levels": _v(levels, "", "calculated"),
+                 "beam_heights_ft": beams,
+                 "top_beam": _v(top_beam, "ft", "calculated"),
+                 "top_load": _v(top_load, "ft", "calculated", "top beam + load height")},
+        "building": {"clear_height": _v(clear, "ft", "measured", "lowest overhead obstruction (P5) in the Matterport scan"),
+                     "roof_deck": _v(interior_js.get("deck_ft"), "ft", "measured", "roof deck height in the Matterport scan"),
+                     "sprinkler_clearance": _v(spr_ft, "ft", "assumed", spr_note),
+                     "usable_height": _v(usable, "ft", "calculated", "clear height - sprinkler clearance"),
+                     "column_bay": _v((interior_js.get("columns") or {}).get("bays", {}).get("x", {}) and
+                                      (interior_js["columns"]["bays"]["x"] or {}).get("spacing_ft"), "ft", "measured",
+                                      "column spacing fitted in the scan") if isinstance(interior_js.get("columns"), dict) else None},
+        "aisle": _v(round(aisle_m / FT, 1), "ft", "assumed", f"minimum aisle for the {spec.get('name')} (library spec)"),
+        "machine": {"name": spec.get("name"), "basis": spec.get("basis"),
+                    "length": _v(md.get("length"), "ft", "assumed"), "width": _v(md.get("width"), "ft", "assumed"),
+                    "height": _v(md.get("height_mast_lowered") or md.get("height"), "ft", "assumed", "mast lowered"),
+                    "lift_height": _v(spec.get("lift_height_ft"), "ft", "assumed"),
+                    "capacity": _v(spec.get("capacity_lb"), "lb", "assumed")},
+        "lane": {"width": _v(8.0, "ft", "assumed", "one pallet-wide staging lane per dock door"),
+                 "pallet_depth": _v(pal["depth_in"], "in", psrc)},
+    }
+    lift = spec.get("lift_height_ft") or 0
+    feas = [
+        {"id": "levels", "label": "At least one storage level fits",
+         "ok": levels >= 1,
+         "detail": (f"{levels} levels: the top load reaches {top_load} ft under a {usable} ft usable height"
+                    if levels >= 1 else f"a {pal['load_in']:g} in load does not fit under the {usable} ft usable height")},
+        {"id": "sprinkler", "label": "Top load stays below the sprinkler clearance",
+         "ok": top_load is not None and top_load <= usable + 1e-6,
+         "detail": f"top load {top_load} ft vs {usable} ft ({clear} ft clear - {spr_ft:g} ft clearance)" if top_load else "no levels"},
+        {"id": "lift", "label": f"{spec.get('name')} reaches the top beam",
+         "ok": top_beam is not None and lift >= top_beam,
+         "detail": f"lifts {lift} ft; top beam {top_beam} ft" if top_beam is not None else "no levels"},
+        {"id": "frame", "label": "Pallet depth suits a standard rack frame",
+         "ok": 36 <= pal["depth_in"] <= 54,
+         "detail": f"{pal['depth_in']:g} in pallet on a {pal['frame_depth_in']:g} in frame "
+                   f"({OVERHANG_IN:g} in overhang each side)" + ("" if 36 <= pal["depth_in"] <= 54 else
+                                                                  ": outside the usual 36-54 in, needs special frames")},
+        {"id": "reach", "label": "Every rack face is reachable",
+         "ok": (proofs.get("reachable_pct") or 0) >= 99.5,
+         "detail": f"{proofs.get('reachable_pct', 0):g}% of positions reachable by the {spec.get('name')}"},
+        {"id": "capacity", "label": "The layout stores pallets", "ok": positions > 0,
+         "detail": f"{positions:,} pallet positions on the scanned floor"},
+    ]
+    return dims, feas
+
+
 # ------------------------------------------------------------------ main
 def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perpendicular", zone_types=None,
-         edits=None, use_cache=True):
+         edits=None, use_cache=True, pallet=None):
     from proinspect import racks
     from proinspect.sim.layout import PALLET_LEVEL_FT, generate
     from proinspect.sim.site import CELL
@@ -263,8 +377,10 @@ def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perp
         raise ValueError(f"unknown machine {machine}")
     w = racks._catalog(pid)
     model_id = racks._scan(w)
+    pal = pallet_spec(pallet)
     key = hashlib.sha256(json.dumps([pid, model_id, operation, machine, sorted(keep) if keep is not None else None,
-                                     orientation, zone_types or {}, edits or {}, _code()], sort_keys=True)
+                                     orientation, zone_types or {}, edits or {}, _code(),
+                                     {k: pal[k] for k in ("width_in", "depth_in", "load_in", "source")}], sort_keys=True)
                          .encode()).hexdigest()[:16]
     p = OUT / f"{key}.json"
     if use_cache and p.exists():
@@ -330,11 +446,17 @@ def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perp
             z["positions"] = 0
             continue
         prm, z["what"] = _zone_params(z["type"], machine, eq)
+        per_bay = 2
+        if z["type"] in ("selective", "dense"):              # pallet racks follow the buyer's pallet
+            per_bay = pal["per_bay"]
+            prm = {**prm, "rack_d": pal["frame_depth_in"] * 0.0254 * prm.get("deep", 1),
+                   "bay": pal["bay_in"] * 0.0254, "level_ft": pal["level_in"] / 12, "load_ft": pal["load_in"] / 12}
         fleet = {} if z["type"] == "shelving" else {machine: 1}       # shelving is worked by people with carts
         lay = generate(site, fleet, sprinkler_ft=spr_ft, dock_zone=(not transposed and bool(site.doors)), place_mask=band, **prm)
         lay0 = lay0 or lay
         lv = lay.levels
         levels_by_zone[z["id"]] = (lv, prm.get("level_ft", PALLET_LEVEL_FT))
+        z["levels"] = lv
         zr = racks._rows(lay.bays, lv)
         for r in zr:
             r["id"] = f"{z['id']}-{r['id']}"
@@ -342,7 +464,9 @@ def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perp
             r["type"] = z["type"]
             r["levels"] = lv
             r["deep"] = prm.get("deep", 1)
-            r["slots"] = r["bays"] * 2 * lv * prm.get("deep", 1)
+            r["slots"] = r["bays"] * per_bay * lv * prm.get("deep", 1)
+            r["per_bay"] = per_bay
+            r["level_ft"] = round(prm.get("level_ft", PALLET_LEVEL_FT), 3)
             b0 = next((b for b in lay.bays if abs(b["x0"] - r["x0"]) < 0.02 and r["y0"] - 0.05 <= b["y0"] <= r["y1"]), None)
             r["aisle_x"] = b0["aisle_x"] if b0 else (r["x0"] + r["x1"]) / 2
         z["unreachable_bays_dropped"] = lay.params.get("bays_dropped_unreachable", 0)
@@ -382,6 +506,12 @@ def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perp
                         f"the scan covers only {coverage:.0f}% of the building, so a whole-building number would be a "
                         "guess: treat it as unreliable")}
 
+    dims, feas = _dims(site, w, pal, lv_main, lvl_ft, spr_ft, spr_note, eq, machine, aisle_m, interior_js, proofs,
+                       positions, zones)
+    mpos = None
+    if example and len(example["points"]) >= 2:
+        (x0_, y0_), (x1_, y1_) = example["points"][0], example["points"][min(2, len(example["points"]) - 1)]
+        mpos = {"x": round(x0_, 2), "y": round(y0_, 2), "heading_deg": round(math.degrees(math.atan2(y1_ - y0_, x1_ - x0_)), 1)}
     scene = racks._scene(site, [r for r in rows], lanes, lv_main, model_id, pid, transposed)
     _decorate_scene(scene, site, rows, transposed, model_id, eq, machine, example, proofs)
     scene["removed"] = _removed_outlines(site, transposed, model_id, [o for o in objs if not o["kept"]])
@@ -395,13 +525,15 @@ def plan(pid, operation="pallet_3pl", machine=None, keep=None, orientation="perp
         "scan_coverage_pct": coverage, "building_estimate": est,
         "levels": lv_main, "levels_basis": f"{site.clear_height_ft:.1f} ft lowest obstruction (scan) - {spr_ft:g} ft sprinkler clearance; {spr_note}",
         "scanned_sqft": round(scanned_sqft), "proofs": proofs, "rows": rows, "transposed": transposed,
+        "pallet": pal, "dims": dims, "feasibility": feas, "machine_pos": mpos,
         "lanes": [{k_: round(float(L[k_]), 2) for k_ in ("x0", "x1", "y0", "y1")} for L in lanes],
         "plan": racks._plan_geometry(site, transposed),
         "assumptions": [
             "today's low contents (pallets, clutter) are removed unless kept; full-height structures stay unless removed",
             "the Matterport scan itself cannot be erased: removed items are outlined red on the floor in 3D",
-            "rack geometry: 42 in frames, 2 pallets per 8.25 ft bay, 5.5 ft per level; dense = double-deep; "
-            "shelving = 7 ft, 4 levels, 4 ft aisles",
+            f"rack geometry from the pallet ({pal['name']}, {pal['load_in']:g} in load): {pal['frame_depth_in']:g} in "
+            f"frames, {pal['per_bay']} pallets per {pal['bay_in'] / 12:.2f} ft bay, {pal['level_in'] / 12:.2f} ft per level; "
+            "dense = double-deep; shelving = 7 ft, 4 levels, 4 ft aisles",
             f"machine speeds, lift rate and aisle widths are library values ({eq[machine].get('basis', 'typical')})",
             "daily pallet moves come from the operation profile, scaled to the building size: replace with your own",
             *(["no dock doors fall inside the scanned area, so no dock apron or staging lanes are reserved on it"]

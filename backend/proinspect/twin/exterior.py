@@ -77,6 +77,41 @@ class Frame:
         return m
 
 
+def _sqft_ll(g, lat0, lon0):
+    """Area in SF of a lon/lat geometry (local metres around lat0/lon0)."""
+    from shapely.ops import transform
+    return transform(lambda lon, lat, z=None: el.to_local(lat, lon, lat0, lon0), g).area * 10.7639
+
+
+def _osm_building_ll(w):
+    """The CoStar building's outline (lon/lat) from OpenStreetMap: under or within 60 m of CoStar's point, with
+    footprint x stories 0.6-1.6x CoStar's size. None when OSM has no such building (or is unreachable)."""
+    from shapely.ops import transform
+    from proinspect.yard import roads
+    sf = w.get("rba_sqft") or w.get("gba_sqft")
+    st = w.get("stories") or 1
+    try:
+        osm = roads.buildings(round(w["lat"], 5), round(w["lon"], 5), 450)
+    except Exception:                                            # noqa: BLE001
+        return None
+    pt = Point(0, 0)
+    best = None
+    for b in osm:
+        ll = Polygon([(lo, la) for la, lo in b["nodes"]])
+        if not ll.is_valid:
+            ll = ll.buffer(0)
+        if ll.geom_type != "Polygon":
+            continue
+        loc = transform(lambda lon, lat, z=None: el.to_local(lat, lon, w["lat"], w["lon"]), ll)
+        sqft = loc.area * 10.7639
+        if sf and not (0.6 <= sqft * st / sf <= 1.6):
+            continue
+        d = loc.distance(pt)
+        if d <= 60 and (best is None or d < best[0]):
+            best = (d, ll, b["id"])
+    return (best[1], best[2]) if best else None
+
+
 def _site(property_id):
     cat = {w["id"]: w for w in json.loads((BUILD / "catalog" / "warehouses.json").read_text())}
     w = cat[property_id]
@@ -86,7 +121,36 @@ def _site(property_id):
     feat = ext["features"][0]
     parcel = shp_wkt.loads(vx.to_wkt(feat["geometry"]))
     sts = feat["properties"].get("structures", [])
-    return w, feat["properties"], parcel, sts
+    costar_sf = w.get("rba_sqft") or w.get("gba_sqft")
+    seen = sum(_sqft_ll(shp_wkt.loads(s["footprint.wkt"]), w["lat"], w["lon"]) for s in sts if s.get("footprint.wkt"))
+    if not (costar_sf and seen < 0.3 * costar_sf):
+        return w, feat["properties"], parcel, sts
+    # The parcel at CoStar's point holds other buildings (CoStar's point can sit on a neighbouring lot). Find the real
+    # building in OpenStreetMap, then ask Vexcel for the parcel at ITS centre; fall back to the OSM outline itself.
+    hit = _osm_building_ll(w)
+    if not hit:
+        return w, feat["properties"], parcel, sts
+    osm, oid = hit
+    c = osm.representative_point()
+    ext2 = vx.property_extract(c.y, c.x)
+    if ext2:
+        f2 = ext2["features"][0]
+        sts2 = f2["properties"].get("structures", [])
+        seen2 = sum(_sqft_ll(shp_wkt.loads(s["footprint.wkt"]), c.y, c.x) for s in sts2 if s.get("footprint.wkt"))
+        if seen2 >= 0.6 * costar_sf:
+            props = {**f2["properties"], "_site_note": f"parcel found at the building's centre (OpenStreetMap way {oid}): "
+                                                       "the Vexcel parcel at CoStar's point held other buildings"}
+            return w, props, shp_wkt.loads(vx.to_wkt(f2["geometry"])), sts2
+    sqft = _sqft_ll(osm, c.y, c.x)
+    d = 40 / 111_320                                     # no matching Vexcel parcel: the outline + a 40 m apron
+    par = shp_wkt.loads(vx.to_wkt(ext2["features"][0]["geometry"])) if ext2 else None
+    # the property must hold the whole building + an apron (a Vexcel parcel at the centre can cover only part of it)
+    par = osm.buffer(d) if par is None or not par.contains(c) else unary_union([par, osm.buffer(d)])
+    if par.geom_type == "MultiPolygon":
+        par = max(par.geoms, key=lambda g: g.area)
+    props = {**(ext2["features"][0]["properties"] if ext2 else feat["properties"]),
+             "_site_note": f"footprint from OpenStreetMap way {oid}: the Vexcel parcel at CoStar's point held other buildings"}
+    return w, props, par, [{"footprint.wkt": osm.wkt, "footprint.area": sqft, "_source": "osm"}]
 
 
 def _heights(fr):
@@ -108,16 +172,29 @@ def _ortho(fr):
     return a, img
 
 
+VEHICLE_TILE_HALF_M = 140      # over a bigger window SAM3 sees trailers as a few pixels and misses most of them
+
+
 def _vehicles(fr):
-    """SAM3 vehicles on the ortho -> local polygons by label (transparent on the court)."""
-    area = vx.square_around(fr.lat0, fr.lon0, fr.half)
-    res = vx.detect_raw(area, VEHICLE_LABELS, "ortho", 0.4)
+    """SAM3 vehicles on the ortho -> local polygons by label (transparent on the court). Large windows (1M+ SF sites)
+    are tiled so a trailer stays big enough to detect; detections on tile seams are de-duplicated."""
+    n = max(1, math.ceil(fr.half / VEHICLE_TILE_HALF_M))
+    step = 2 * fr.half / n
     out = {l: [] for l in VEHICLE_LABELS}
-    for f in res.get("features", []):
-        for d in f["properties"]["detections"]:
-            g = vx.mask_to_wkt(d["pixel-mask"], d["bbox"], "ortho") if d.get("pixel-mask") else d["bbox"]
-            out[f["properties"]["label"]].append(
-                {"poly": fr.geom(shp_wkt.loads(g or d["bbox"])), "conf": round(d["confidence"], 2)})
+    for i in range(n):
+        for j in range(n):
+            ox, oy = -fr.half + step * (i + 0.5), -fr.half + step * (j + 0.5)
+            lat = fr.lat0 + oy / 110_574
+            lon = fr.lon0 + ox / (111_320 * math.cos(math.radians(fr.lat0)))
+            res = vx.detect_raw(vx.square_around(lat, lon, step / 2), VEHICLE_LABELS, "ortho", 0.4)
+            for f in res.get("features", []):
+                for d in f["properties"]["detections"]:
+                    g = vx.mask_to_wkt(d["pixel-mask"], d["bbox"], "ortho") if d.get("pixel-mask") else d["bbox"]
+                    poly = fr.geom(shp_wkt.loads(g or d["bbox"]))
+                    lab = f["properties"]["label"]
+                    if any(v["poly"].centroid.distance(poly.centroid) < 1.5 for v in out[lab]):
+                        continue                                  # the same vehicle seen from two tiles
+                    out[lab].append({"poly": poly, "conf": round(d["confidence"], 2)})
     return out
 
 
@@ -318,6 +395,66 @@ def _court(fr, e, doors_on_edge, nd, paved, vehicle, others, parcel_m):
 
 
 # ------------------------------------------------------------------ the measurement
+def _fix_swallowed_roof(fr, fps, nd, dtm, hmeta):
+    """On very large flat roofs (1M+ SF) the bare-ground model can take the roof for ground: the building then reads
+    ~0 m tall and the strip outside its walls looks like neither ground nor building ('unpaved' in the yard grid).
+    When the footprint's median height is under 2 m (a warehouse is 6 m+), rebuild the ground as a plane fitted to the
+    lower 40% of the surface model around the buildings (sites here are flat) and recompute the heights."""
+    inside = fr.raster(fps)
+    if inside.sum() < 1000 or float(np.nanmedian(nd[inside])) >= 2.0:
+        return nd, dtm
+    dsm = nd + dtm
+    rr, cc = np.nonzero(~fr.raster([f.buffer(3) for f in fps]) & np.isfinite(dsm))
+    if len(rr) < 1000:
+        return nd, dtm
+    pick = np.random.default_rng(0).choice(len(rr), min(len(rr), 200_000), replace=False)
+    rr, cc = rr[pick], cc[pick]
+    z = dsm[rr, cc]
+    low = z <= np.nanpercentile(z, 40)
+    A = np.c_[cc[low], rr[low], np.ones(int(low.sum()))].astype(np.float64)
+    coef, *_ = np.linalg.lstsq(A, z[low].astype(np.float64), rcond=None)
+    R, C = np.mgrid[0:dsm.shape[0], 0:dsm.shape[1]]
+    ground = (coef[0] * C + coef[1] * R + coef[2]).astype(np.float32)
+    nd2 = dsm - ground
+    hmeta["dtm_note"] = (f"the bare-ground model took the roof for ground (building read "
+                         f"{float(np.nanmedian(nd[inside])):.1f} m tall); ground refitted as a plane from the surface "
+                         f"model around the building (now {float(np.nanmedian(nd2[inside])):.1f} m)")
+    return nd2, ground
+
+
+def _snap_to_roof(fr, poly, nd):
+    """Fit an outline to the roof the surface model measures: cells above half the outline's median height, in the
+    connected blob that overlaps the outline most. A rectangle-like outline (<= 6 corners) becomes the blob's minimum
+    rotated rectangle; otherwise the outline is shifted by the blob's centroid offset. None when the fit is not
+    plausible (area outside 0.8-1.3x the outline's)."""
+    from shapely.geometry import MultiPoint
+    inside = fr.raster([poly])
+    if inside.sum() < 500:
+        return None
+    h = float(np.nanmedian(nd[inside]))
+    if h < 4:
+        return None
+    tall = np.nan_to_num(nd) > max(6.0, 0.5 * h)                   # trailers (~4 m) and cars stay out
+    tall = ndimage.binary_opening(tall, iterations=2)
+    lab, n = ndimage.label(tall)
+    if not n:
+        return None
+    hits = np.bincount(lab[inside & tall], minlength=n + 1)
+    k = int(np.argmax(hits[1:])) + 1
+    blob = lab == k
+    area_ratio = blob.sum() / inside.sum()
+    if not 0.8 <= area_ratio <= 1.3:
+        return None
+    rr, cc = np.nonzero(blob)
+    xs = -fr.half + (cc + 0.5) * RES
+    ys = fr.half - (rr + 0.5) * RES
+    if len(poly.exterior.coords) <= 7:
+        pts = MultiPoint(np.c_[xs, ys][::7]).convex_hull
+        return pts.minimum_rotated_rectangle
+    from shapely.affinity import translate
+    return translate(poly, xs.mean() - poly.centroid.x, ys.mean() - poly.centroid.y)
+
+
 def measure(property_id, save=True):
     w, pprops, parcel_ll, sts = _site(property_id)
     if not sts:
@@ -328,13 +465,20 @@ def measure(property_id, save=True):
     minx, miny, maxx, maxy = parcel_ll.bounds
     reach = max(math.hypot((x - c.x) * 111_320 * math.cos(math.radians(c.y)), (y - c.y) * 110_574)
                 for x in (minx, maxx) for y in (miny, maxy))
-    fr = Frame(c.y, c.x, min(max(reach + 40, 120), 250))
+    fr = Frame(c.y, c.x, min(max(reach + 40, 120), 420))     # up to 840 m across: 1M+ SF buildings fit
     fps = [fr.geom(f) for f in foot_ll]
     fp = fps[main_i]
     parcel = fr.geom(parcel_ll)
 
     nd, hmeta = _heights(fr)
     dtm = hmeta.pop("dtm_raw", None)
+    if nd is not None and dtm is not None:
+        nd, dtm = _fix_swallowed_roof(fr, fps, nd, dtm, hmeta)
+    if nd is not None and sts[main_i].get("_source") == "osm":   # OSM outlines can sit metres off the real roof edge
+        snapped = _snap_to_roof(fr, fps[main_i], nd)
+        if snapped is not None:
+            fps[main_i], fp = snapped, snapped
+            hmeta["footprint_note"] = "OpenStreetMap outline snapped to the roof measured in the Vexcel surface model"
     if nd is not None:                                     # vertical datum: ground cells near 0
         outside = ~fr.raster(fps) & fr.raster([parcel])
         if outside.sum() > 100:
@@ -403,6 +547,7 @@ def measure(property_id, save=True):
         "parcel_mismatch": parcel_mismatch,
         "parcel_note": (f"Vexcel parcel at the CoStar point has {round(seen_sf):,} SF of buildings vs CoStar "
                         f"{round(costar_sf):,} SF: this may be the wrong parcel" if parcel_mismatch else None),
+        "site_note": pprops.get("_site_note"),
         "buildings": buildings,
         "doors": {"total": len(doors), "dock_high": counts["dock_high"], "drive_in": counts["drive_in"],
                   "uncertain": counts["uncertain"], "items": doors,

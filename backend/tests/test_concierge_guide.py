@@ -97,7 +97,11 @@ def test_rank_falls_back_and_says_so(monkeypatch):
     r = asyncio.run(VX.rank("parking_area_sqft", "Houston", 3))
     assert r["rows"] and r["metric"] in ("paved_area_sqft", "costar_parking_spaces")
     assert r["notes"]                                                            # the fallback is reported
-    assert 11175666 not in [x["id"] for x in r["rows"]]                          # wrong-parcel site suppressed
+    from proinspect.config import BUILD                                          # sites still flagged as a wrong
+    def flagged(i):                                                              # parcel are suppressed
+        p = BUILD / "twins" / "exterior" / f"{i}.json"
+        return p.exists() and json.loads(p.read_text()).get("parcel_mismatch")
+    assert not [x["id"] for x in r["rows"] if flagged(x["id"])]
 
 
 # ------------------------------------------------------------------ acceptance a: biggest parking lot

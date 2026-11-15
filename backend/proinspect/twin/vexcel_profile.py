@@ -212,11 +212,12 @@ def _site(pid):
     if pid not in cat:
         raise KeyError(f"{pid} is not in the warehouse catalog")
     w = cat[pid]
-    ext = vx.property_extract(w["lat"], w["lon"])
-    if not ext or not ext.get("features"):
+    from proinspect.twin import exterior as ex             # same parcel as the exterior twin, incl. the fallback for
+    try:                                                   # a CoStar point on the wrong lot (OSM-guided re-lookup)
+        _, props, parcel, sts = ex._site(pid)
+    except ValueError:
         return w, None, None, []
-    f = ext["features"][0]
-    return w, f["properties"], shp_wkt.loads(vx.to_wkt(f["geometry"])), f["properties"].get("structures") or []
+    return w, props, parcel, sts or []
 
 
 def _twin(pid):

@@ -8,6 +8,7 @@ in plan._gate remain the fallback when OSM has no driveway here.
     gate_candidates(lat0, lon0, half_m, parcel)     -> [{x, y, nx, ny, street_dir, method, osm}] in local ENU
 """
 import math
+import time
 
 import httpx
 
@@ -35,6 +36,29 @@ def ways(lat0, lon0, half_m):
             out.append({"id": e["id"], "tags": e.get("tags", {}),
                         "nodes": [(g["lat"], g["lon"]) for g in e["geometry"]]})
     return out
+
+
+@cached("osm")
+def buildings(lat0, lon0, half_m):
+    """OSM building polygons (closed ways) in a box: [{id, tags, nodes:[(lat, lon)...]}]."""
+    d_lat = half_m / 111320.0
+    d_lon = half_m / (111320.0 * math.cos(math.radians(lat0)))
+    bbox = f"{lat0 - d_lat:.6f},{lon0 - d_lon:.6f},{lat0 + d_lat:.6f},{lon0 + d_lon:.6f}"
+    q = f'[out:json][timeout:25];way["building"]({bbox});out tags geom;'
+    err = None
+    for url in (OVERPASS, OVERPASS, "https://overpass.kumi.systems/api/interpreter"):   # public servers 502 at times
+        try:
+            r = httpx.post(url, data={"data": q}, timeout=40,
+                           headers={"User-Agent": "proinspect-hackathon/1.0 (building footprints)"})
+            r.raise_for_status()
+            break
+        except httpx.HTTPError as e:
+            err = e
+            time.sleep(2)
+    else:
+        raise err
+    return [{"id": e["id"], "tags": e.get("tags", {}), "nodes": [(g["lat"], g["lon"]) for g in e["geometry"]]}
+            for e in r.json().get("elements", []) if e.get("type") == "way" and len(e.get("geometry") or []) >= 4]
 
 
 def _enu(lat0, lon0, pts):

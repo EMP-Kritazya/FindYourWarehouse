@@ -672,11 +672,56 @@ def _registration(pid, w):
 
 
 # ------------------------------------------------------------------ build / load / save
+def osm_footprint(twin, w):
+    """When the Vexcel parcel is the wrong one, the CoStar building's outline from OpenStreetMap: the building under
+    (or nearest within 60 m of) CoStar's point whose footprint x stories is 0.6-1.6x CoStar's size. In the twin's
+    local frame, or None."""
+    from shapely.geometry.polygon import orient
+    from proinspect.yard import roads
+    if not w or w.get("lat") is None:
+        return None
+    sf = w.get("rba_sqft") or w.get("gba_sqft")
+    st = w.get("stories") or 1
+    lat0, lon0 = twin["frame"]["lat0"], twin["frame"]["lon0"]
+    try:
+        osm = roads.buildings(round(w["lat"], 5), round(w["lon"], 5), 450)
+    except Exception:                                            # noqa: BLE001
+        return None
+    px, py = (float(v) for v in el.to_local(w["lat"], w["lon"], lat0, lon0))
+    best = None
+    for b in osm:
+        pts = [tuple(float(v) for v in el.to_local(la, lo, lat0, lon0)) for la, lo in b["nodes"]]
+        poly = Polygon(pts)
+        if not poly.is_valid:
+            poly = poly.buffer(0)
+        if poly.geom_type != "Polygon" or poly.area < 300:
+            continue
+        sqft = poly.area * 10.7639
+        if sf and not (0.6 <= sqft * st / sf <= 1.6):
+            continue
+        d = poly.distance(Point(px, py))
+        if d <= 60 and (best is None or d < best[0]):
+            best = (d, orient(poly.simplify(0.5), 1.0), sqft, b["id"])
+    if not best:
+        return None
+    _, poly, sqft, oid = best
+    return {"index": 0, "main": True, "footprint_sqft": round(sqft),
+            "footprint_local": [[round(x, 2), round(y, 2)] for x, y in list(poly.exterior.coords)],
+            "source": f"OpenStreetMap way {oid}"}
+
+
 def build(pid, keep_user=True, with_trailers=True, with_span=True, gate=True, registration=True, with_facades=True,
           facades_cache_only=True):
     pid = int(pid)
     twin = _twin(pid)
     w = _catalog(pid)
+    osm_note = None
+    if twin.get("parcel_mismatch"):            # the Vexcel parcel is the wrong one: use the real building's outline
+        fp = osm_footprint(twin, w)
+        if fp:
+            twin = {**twin, "buildings": [fp], "building": {**(twin.get("building") or {}), "footprint_local": fp["footprint_local"]}}
+            osm_note = (f"footprint from {fp['source']} ({fp['footprint_sqft']:,} SF): the Vexcel parcel at the CoStar "
+                        "point held other buildings")
     frame = {"lat0": twin["frame"]["lat0"], "lon0": twin["frame"]["lon0"]}
     store = {"property_id": pid, "version": VERSION, "build_tag": BUILD_TAG, "updated_at": _now(), "frame": frame,
              "buildings": buildings_of(twin), "gate": None, "registration": None, "doors": [],
@@ -701,7 +746,10 @@ def build(pid, keep_user=True, with_trailers=True, with_span=True, gate=True, re
     props = [_place(frame, eidx, d) for d in merge_along(props)]
     if with_span and store["costar"]["docks"]:
         props += [_place(frame, eidx, d) for d in span_fill(store, props)]
-    if twin.get("parcel_mismatch"):
+    if osm_note:
+        store["notes"].append(osm_note)
+        store["footprint_source"] = "osm"
+    elif twin.get("parcel_mismatch"):
         store["notes"].append("WARNING: " + (twin.get("parcel_note") or "the Vexcel parcel may be the wrong one"))
     prev = None
     if keep_user and _path(pid).exists():

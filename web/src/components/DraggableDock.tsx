@@ -18,9 +18,11 @@ export default function DraggableDock({ defaultStyle, hidden, children }: { defa
   const drag = useRef<{ dx: number; dy: number } | null>(null)
 
   const clamp = useCallback((p: Pos): Pos => {
-    const w = box.current?.offsetWidth ?? 380
+    // keep what is VISIBLE on screen: the dock box is 380 px wide, but collapsed it only shows the pill + orb
+    const b = box.current?.getBoundingClientRect(), c = (box.current?.firstElementChild as HTMLElement | null)?.getBoundingClientRect()
+    const offL = b && c ? c.left - b.left : 0, offR = b && c ? c.right - b.left : 380
     return {
-      left: Math.max(8, Math.min(window.innerWidth - w - 8, p.left)),            // fully on screen, never off the edge
+      left: Math.max(8 - offL, Math.min(window.innerWidth - offR - 8, p.left)),
       bottom: Math.max(8, Math.min(window.innerHeight - 140, p.bottom)),
     }
   }, [])
@@ -33,14 +35,16 @@ export default function DraggableDock({ defaultStyle, hidden, children }: { defa
     const raf = requestAnimationFrame(on)
     window.addEventListener('resize', on)
     const ro = typeof ResizeObserver !== 'undefined' && box.current ? new ResizeObserver(on) : null
-    if (ro && box.current) ro.observe(box.current)
+    if (ro && box.current) { ro.observe(box.current); if (box.current.firstElementChild) ro.observe(box.current.firstElementChild) }
     return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', on); ro?.disconnect() }
   }, [clamp])
 
   const start = (e: React.PointerEvent) => {
     const r = box.current?.getBoundingClientRect()
     if (!r) return
-    drag.current = { dx: e.clientX - r.left, dy: window.innerHeight - e.clientY - (window.innerHeight - r.bottom) }
+    // measure the grab point from the VISIBLE content: once moved, the content sits at the box's left edge
+    const c = (box.current?.firstElementChild as HTMLElement | null)?.getBoundingClientRect() ?? r
+    drag.current = { dx: e.clientX - c.left, dy: window.innerHeight - e.clientY - (window.innerHeight - r.bottom) }
     ;(e.currentTarget as Element).setPointerCapture(e.pointerId)
     e.preventDefault()
   }

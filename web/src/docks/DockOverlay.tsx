@@ -143,6 +143,8 @@ const DOOR_TYPES: { kind: DoorKind; label: string; sub: string; hint: string }[]
 ]
 const REJECT_REASONS = ['Window', 'Wall / vent', 'Duplicate', 'Other building']
 
+if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__dockOverlay = useDockOverlay   // dev-only test handle
+
 /** Proof popup glued to the clicked door. */
 export function DockProofPopup() {
   const popup = useDockOverlay((s) => s.popup)
@@ -195,7 +197,7 @@ export function DockProofPopup() {
   }
   const conf = Math.max(0, ...door.evidence.map((e) => e.conf ?? 0))
   return (
-    <div ref={ref} className="pointer-events-auto absolute left-0 top-0 z-[19] w-[300px] opacity-0" data-testid="dock-proof">
+    <div ref={ref} className="pointer-events-auto absolute left-0 top-0 z-[45] w-[300px] opacity-0" data-testid="dock-proof">
       <div className="glass fade-up overflow-hidden rounded-xl">
         <div className="flex items-center gap-2 px-3 pb-2 pt-2.5">
           <span className="inline-block h-2.5 w-2.5 rounded-[3px]" style={{ background: `rgb(${(DOOR_KIND_RGB[door.kind] ?? DOOR_KIND_RGB.unknown).join(' ')})` }} />

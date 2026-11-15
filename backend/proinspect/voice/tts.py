@@ -14,7 +14,8 @@ import httpx
 
 from proinspect import config  # noqa: F401  (loads .env)
 
-VOICE_ID = os.environ.get("PROINSPECT_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")   # premade voice (no voices_read scope)
+# "Sarah": ElevenLabs premade voice, young adult woman, confident and warm (premade ids work without voices_read)
+VOICE_ID = os.environ.get("PROINSPECT_VOICE_ID", "EXAVITQu4vr4xnSDxMaL")
 MODEL_ID = "eleven_flash_v2_5"
 URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice}/stream?output_format=mp3_44100_128"
 

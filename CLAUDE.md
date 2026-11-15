@@ -142,7 +142,7 @@ vegetation attributes, roadway intelligence, semantic embeddings.
 - **Code:** `backend/proinspect/`, which holds `tools/matterport.py`, `tools/vexcel.py`, `tools/elevation.py`, `cache.py`
   and `warehouses.py`. The venv is `ProInspect/.venv` (Python 3.12).
 - **Voice: ElevenLabs** (`ELEVEN_LABS_API_KEY`). The key is scoped: TTS and STT work, but it can't list voices or read
-  the user account. Flash v2.5 TTS reaches first audio in 0.27 s; Scribe STT takes 0.5 s. Default voice id `JBFqnCBsd6RMkjVDRZzb`.
+  the user account. Flash v2.5 TTS reaches first audio in 0.27 s; Scribe STT takes 0.5 s. Default voice: "Sarah" `EXAVITQu4vr4xnSDxMaL` (young woman; was George `JBFqnCBsd6RMkjVDRZzb`); override with `PROINSPECT_VOICE_ID`. The browser fallback picks a female English system voice (Samantha/Ava/Google US English…).
 
 ## Phase 1 modules (backend/proinspect/)
 - `catalog.py` builds `build/catalog/warehouses.json`: one clean record per warehouse, with specs, listings and rent,
@@ -558,3 +558,8 @@ vegetation attributes, roadway intelligence, semantic embeddings.
   - **Controls beside the orb:** a persistent voice switch (localStorage `pi.voice.off` → ws `{type:"voice", on}`;
     off = text only, server-enforced) and a Stop button while speaking. A stop (barge_in during a reply) silences
     unprompted speech for 5 min (`QUIET_AFTER_STOP_S`).
+- **Door review in the proof popup (2026-11-15):**
+  - "What is it?" Dock-high / Drive-in / Door (type unsure): sets `kind` (kind_conf 1) and confirms.
+  - "Not a door": Window / Wall / vent / Duplicate / Other building: rejects with `reason`. `docks._validate_door`
+    keeps `reason`; `docksApi.reviewDoor`.
+  - The type feeds the yard test (semis use only dock-high or unknown doors).

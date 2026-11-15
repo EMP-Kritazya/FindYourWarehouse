@@ -209,7 +209,10 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
         case 'tts_fallback':
           if (!mutedRef.current && !dropAudio.current && typeof window !== 'undefined' && 'speechSynthesis' in window) {
             const u = new SpeechSynthesisUtterance(m.text);
-            u.rate = 1.05;
+            const v = analystVoice();
+            if (v) { u.voice = v; u.lang = v.lang; }
+            u.rate = 1.04;
+            u.pitch = 1.05;
             window.speechSynthesis.speak(u);
           }
           break;
@@ -398,6 +401,30 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
       </div>
     </div>
   );
+}
+
+/** Browser fallback voice: a natural young woman's English voice when the system has one (macOS Samantha / Ava /
+ *  Allison, Chrome "Google US English", Windows Aria / Jenny / Zira). Enhanced/premium/neural variants first. */
+const FEMALE = ['ava', 'samantha', 'allison', 'susan', 'zoe', 'nicky', 'serena', 'aria', 'jenny', 'michelle', 'emma',
+  'google us english', 'google uk english female', 'zira', 'karen', 'tessa', 'moira', 'victoria', 'kate', 'fiona']
+let pickedVoice: SpeechSynthesisVoice | null | undefined;
+function analystVoice(): SpeechSynthesisVoice | null {
+  if (pickedVoice !== undefined && pickedVoice !== null) return pickedVoice;
+  const all = typeof window !== 'undefined' && 'speechSynthesis' in window ? window.speechSynthesis.getVoices() : [];
+  if (!all.length) return null;
+  const en = all.filter((v) => v.lang?.toLowerCase().startsWith('en'));
+  const score = (v: SpeechSynthesisVoice) => {
+    const n = v.name.toLowerCase();
+    const i = FEMALE.findIndex((f) => n.includes(f));
+    if (i < 0) return -1;
+    return 100 - i + (/premium|enhanced|neural|natural/.test(n) ? 50 : 0) + (v.lang === 'en-US' ? 5 : 0);
+  };
+  const best = en.map((v) => [score(v), v] as const).filter(([sc]) => sc >= 0).sort((a, b) => b[0] - a[0])[0];
+  pickedVoice = best ? best[1] : null;
+  return pickedVoice;
+}
+if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = () => { pickedVoice = undefined; analystVoice(); };
 }
 
 const GREET_EXAMPLES = [

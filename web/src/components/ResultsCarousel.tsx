@@ -62,7 +62,8 @@ export default function ResultsCarousel() {
   // keep the selected building in view
   useEffect(() => {
     if (selectedId == null) return
-    strip.current?.querySelector(`[data-id="${selectedId}"]`)?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' })
+    const box = strip.current, el = box?.querySelector<HTMLElement>(`[data-id="${selectedId}"]`)
+    if (box && el) box.scrollTo({ left: el.offsetLeft - (box.clientWidth - el.offsetWidth) / 2, behavior: 'smooth' })   // only the strip scrolls
   }, [selectedId])
 
   const ranked = !!curated || !!ranking || search?.mode === 'ranked'

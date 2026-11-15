@@ -1,5 +1,6 @@
 import { Suspense, lazy, useCallback, useEffect } from 'react'
-import { X } from 'lucide-react'
+import { APP_NAME, APP_TAGLINE } from './lib/brand'
+import { Warehouse as WarehouseIcon, X } from 'lucide-react'
 import MapView from './components/MapView'
 import { MarketTabs, SearchBar } from './components/TopBar'
 import ResultsRail from './components/ResultsRail'
@@ -225,7 +226,7 @@ export default function App() {
         : { right: selectedId != null ? 436 : 16, bottom: 158, width: 380, display: 'flex', justifyContent: 'flex-end', transition: 'right 260ms cubic-bezier(.2,.8,.2,1)' }
 
   return (
-    <div className="relative h-full w-full overflow-hidden bg-bg">
+    <div className="relative h-full w-full overflow-clip bg-bg">
       <MapView />
       {listOpen ? <ResultsRail /> : <ResultsCarousel />}
       <Brand />
@@ -309,8 +310,8 @@ function Brand() {
   return (
     <>
       <div className="glass pointer-events-none absolute left-4 top-4 z-20 flex h-11 items-center gap-2 rounded-xl px-3">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-[13px] font-bold text-accent">P</span>
-        <span className="text-[15px] font-semibold tracking-tight">ProInspect</span>
+        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent" aria-hidden="true"><WarehouseIcon size={16} /></span>
+        <span className="text-[15px] font-semibold tracking-tight" title={APP_TAGLINE}>{APP_NAME}</span>
       </div>
       {/* marker legend: colour = availability (or rank when results are ranked), ring = 3D scan, size = building size */}
       <div className={`glass pointer-events-none absolute left-4 z-10 flex h-9 items-center gap-3 rounded-xl px-3 text-[11.5px] text-ink-2 ${listOpen ? 'hidden' : 'bottom-[156px]'}`} style={{ transform: 'translate(var(--strip-dx, 0px), var(--strip-dy, 0px))' }} data-testid="map-legend">

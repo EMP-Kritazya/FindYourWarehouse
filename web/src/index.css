@@ -19,7 +19,8 @@
   --color-bad: #f87171;
 }
 
-html, body, #root { height: 100%; margin: 0; }
+/* full-screen app: the page itself must never scroll (clip, unlike hidden, also blocks focus()/scrollIntoView scrolling) */
+html, body, #root { height: 100%; margin: 0; overflow: clip; overscroll-behavior: none; }
 body {
   background: var(--color-bg);
   color: var(--color-ink);

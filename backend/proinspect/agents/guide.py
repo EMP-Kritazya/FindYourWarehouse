@@ -64,7 +64,7 @@ conversation (not even small counts like trucks seen or doors). Unknown is unkno
 - Contact phone numbers and emails in this dataset are fake: say "the listing contact" (the broker firm), never \
 read them out."""
 
-ORCH_PROMPT = """You are the ProInspect analyst: an industrial real-estate analyst who helps a buyer or operator \
+ORCH_PROMPT = """You are the Warehouse PlayGround analyst: an industrial real-estate analyst who helps a buyer or operator \
 decide "will this warehouse work for my operation?" across about 110 warehouses in Houston and Los Angeles \
 (find -> shortlist -> inspect -> test -> decide). You do ANALYSIS with deterministic tools; the tools compute, \
 you choose the right tool, decide what to investigate, and explain what the tool output means.

@@ -20,14 +20,21 @@ export default function DraggableDock({ defaultStyle, hidden, children }: { defa
   const clamp = useCallback((p: Pos): Pos => {
     const w = box.current?.offsetWidth ?? 380
     return {
-      left: Math.max(8, Math.min(window.innerWidth - Math.min(w, 120) - 8, p.left)),
+      left: Math.max(8, Math.min(window.innerWidth - w - 8, p.left)),            // fully on screen, never off the edge
       bottom: Math.max(8, Math.min(window.innerHeight - 140, p.bottom)),
     }
   }, [])
-  useEffect(() => {                                     // stay on screen when the window shrinks
-    const on = () => setPos((p) => (p ? clamp(p) : p))
+  useEffect(() => {                                     // stay on screen: on load (a saved spot may be off the edge),
+    const on = () => setPos((p) => {                    // when the window shrinks, and when the dock changes size
+      if (!p) return p
+      const c = clamp(p)
+      return c.left === p.left && c.bottom === p.bottom ? p : c
+    })
+    const raf = requestAnimationFrame(on)
     window.addEventListener('resize', on)
-    return () => window.removeEventListener('resize', on)
+    const ro = typeof ResizeObserver !== 'undefined' && box.current ? new ResizeObserver(on) : null
+    if (ro && box.current) ro.observe(box.current)
+    return () => { cancelAnimationFrame(raf); window.removeEventListener('resize', on); ro?.disconnect() }
   }, [clamp])
 
   const start = (e: React.PointerEvent) => {

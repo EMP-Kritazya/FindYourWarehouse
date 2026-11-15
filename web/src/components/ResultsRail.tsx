@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { APP_NAME } from '../lib/brand'
 import clsx from 'clsx'
 import { Box, ChevronDown, Warehouse, ListOrdered, X, Info } from 'lucide-react'
 import { useStore } from '../lib/store'
@@ -131,7 +132,7 @@ export default function ResultsRail() {
       <header className="border-b border-line px-4 pb-3 pt-4">
         <div className="flex items-center gap-2">
           <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-accent/15 text-accent"><Warehouse size={16} /></div>
-          <span className="text-[15px] font-semibold tracking-tight">ProInspect</span>
+          <span className="text-[15px] font-semibold tracking-tight">{APP_NAME}</span>
           <span className="ml-auto flex items-center gap-1"><HeroesMenu />
             <button onClick={() => useStore.setState({ listOpen: false })} title="Back to the map" aria-label="Close the list"
               className="rounded-md p-1.5 text-ink-3 hover:bg-white/5 hover:text-ink"><X size={15} /></button></span>

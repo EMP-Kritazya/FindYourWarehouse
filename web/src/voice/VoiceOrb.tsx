@@ -367,7 +367,8 @@ export default function VoiceOrb({ onUi, context, inline, onEvent }: VoiceOrbPro
           <div className="vo-greet-h">What are we looking for today?</div>
           <div className="vo-greet-s">Tell me your operation, size and trucks. Hold Space to talk, or type.</div>
           <form className="vo-form" onSubmit={(e) => { e.preventDefault(); if (greetText.trim()) { say(greetText.trim()); setGreetText(''); } }}>
-            <input className="vo-input" value={greetText} onChange={(e) => setGreetText(e.target.value)} autoFocus
+            <input className="vo-input" value={greetText} onChange={(e) => setGreetText(e.target.value)}
+              ref={(el) => { if (el && !el.dataset.f) { el.dataset.f = '1'; el.focus({ preventScroll: true }) } }}
               placeholder="e.g. 3PL, 60k SF, 53-ft trailers in Houston" aria-label="What you are looking for" />
           </form>
           <div className="vo-chips" style={{ margin: '8px 0 0' }}>

@@ -563,3 +563,13 @@ vegetation attributes, roadway intelligence, semantic embeddings.
   - "Not a door": Window / Wall / vent / Duplicate / Other building: rejects with `reason`. `docks._validate_door`
     keeps `reason`; `docksApi.reviewDoor`.
   - The type feeds the yard test (semis use only dock-high or unknown doors).
+- **Page-shift bug (2026-11-15):**
+  - **Symptom:** the whole UI slid left, with a black band on the right.
+  - **Cause:** `overflow: hidden` still allows programmatic scrolling. The greeting input's `autoFocus` (with the
+    analyst dragged near the right edge) and the strip's `scrollIntoView` scrolled the page.
+  - **Fix:**
+    - `html, body, #root` and the App root use `overflow: clip`;
+    - the strip uses `scrollTo` on itself;
+    - the greeting focuses with `preventScroll`;
+    - DraggableDock clamps fully on screen on load, resize and size change.
+  - **Rule:** never use `scrollIntoView` / `autoFocus` in overlays.

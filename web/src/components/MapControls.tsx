@@ -21,7 +21,7 @@ export default function MapControls() {
         <IconButton title={`Recentre on ${market}`} onClick={() => mapApi.flyToMarket(market)}><LocateFixed size={16} /></IconButton>
       </div>
       <div className="max-w-[300px] text-[11px] leading-tight text-ink-2/80 [text-shadow:0_1px_2px_rgb(0_0_0/0.9)]">
-        {src === 'vexcel' ? <span title="Aerial basemap: Vexcel Imaging, through the ProInspect tile proxy">Imagery © Vexcel Imaging · </span>
+        {src === 'vexcel' ? <span title="Aerial basemap: Vexcel Imaging, through the Warehouse PlayGround tile proxy">Imagery © Vexcel Imaging · </span>
           : <span title="The Vexcel tile proxy is not serving yet: Esri World Imagery fallback">Imagery © Esri, Maxar, Earthstar Geographics · </span>}
         <a href="https://openfreemap.org" target="_blank" rel="noreferrer" className="hover:text-ink-2">© OpenFreeMap</a>{' '}
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer" className="hover:text-ink-2">© OpenStreetMap</a>

@@ -141,7 +141,7 @@ async function req<T>(url: string, init?: RequestInit): Promise<T> {
   try {
     r = await fetch(url, init)
   } catch {
-    throw new ApiError(0, 'The ProInspect service is unreachable')
+    throw new ApiError(0, 'The Warehouse PlayGround service is unreachable')
   }
   if (!r.ok) throw new ApiError(r.status, `${url} returned ${r.status}`)
   return r.json() as Promise<T>

@@ -262,7 +262,7 @@ class YardGrid:
     (unpaved). `parcel` (optional bool) is the soft limit."""
 
     KINDS = {1: "building", 2: "object over 1 m (wall, fence, tree, structure)", 3: "unpaved / landscaping",
-             4: "truck parked at the next door"}
+             4: "truck parked at the next door", 5: "outside the property (parcel line)"}
 
     def __init__(self, kind, half, res, parcel=None):
         self.kind, self.half, self.res, self.parcel = kind.astype(np.uint8), half, res, parcel

@@ -170,7 +170,7 @@ export default function ManeuverView({ propertyId, result, onRerun }: Props) {
       stroked: true, lineWidthUnits: 'pixels', getLineWidth: 2, getFillColor: [10, 13, 18, 230], getLineColor: [226, 232, 240, 255],
     }),
     gate && new TextLayer({
-      id: 'man-gate-label', data: [gate], getPosition: (d: [number, number]) => d, getText: () => `gate${(res?.gate?.source ?? 'inferred') === 'user' ? '' : ' (inferred)'}`,
+      id: 'man-gate-label', data: [gate], getPosition: (d: [number, number]) => d, getText: () => { const src = res?.gate?.source ?? 'inferred'; return `gate${src === 'user' ? '' : src === 'osm' ? ' (OpenStreetMap driveway)' : ' (inferred)'}` },
       getSize: 11, getColor: [226, 232, 240, 255], getPixelOffset: [0, -17], fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 600,
       background: true, getBackgroundColor: [10, 13, 18, 210], backgroundPadding: [4, 2, 4, 2],
     }),

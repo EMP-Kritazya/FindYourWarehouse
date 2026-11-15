@@ -113,7 +113,7 @@ import importlib  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 for _mod in ("proinspect.api_sim", "proinspect.api_twin", "proinspect.api_concierge", "proinspect.api_vexcel",
-             "proinspect.api_yard", "proinspect.api_fit", "proinspect.api_docks", "proinspect.api_analytics"):
+             "proinspect.api_yard", "proinspect.api_fit", "proinspect.api_docks", "proinspect.api_analytics", "proinspect.api_terrain"):
     try:
         app.include_router(importlib.import_module(_mod).router)
     except ModuleNotFoundError as _e:

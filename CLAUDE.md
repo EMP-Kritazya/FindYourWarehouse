@@ -422,3 +422,18 @@ vegetation attributes, roadway intelligence, semantic embeddings.
 - **Yard planner on tight sites:** gates inside the property's own notches are rejected; pull-past distances shrink to
   fit; tracking scales with wheelbase. 242089: vans and box trucks complete, semis fail in the notches as `planner`.
   Cold runs take 11–21 s (cached runs are instant).
+- **v3.1 (2026-11-15):**
+  - **Planner:** Hybrid A* approach/exit (`yard/hybrid.py`).
+  - **Hard property bounds** (`plan._bounded_grid`): free ground outside the property becomes kind 5. The property is the
+    parcel line only when it matches CoStar's lot size (0.7–1.6×). Otherwise it is the ground within D m of the
+    building, with D chosen so the area equals CoStar's lot. Vexcel parcels were 44–51% of the lot at 242089 and
+    9235035.
+  - **OpenStreetMap** (`yard/roads.py`, Overpass, cached in `cache/osm`): driveways joining a public street are the
+    first gate candidates and are forced drivable, so snapshot clutter on them doesn't block. Parked vehicles are
+    treated as movable.
+  - **Verified:** 0 of 20k truck poses outside the property; 12896757 5/5, 9235035 4/4, 242089 4/4.
+  - **Dock proof:** `GET /api/docks/{pid}/proof` and `/proof/{crop}.jpg`, real Vexcel oblique crops with the SAM3 box,
+    fetched on demand.
+  - **Main map:** a 3D site from the Vexcel nDSM plus ortho (`api_terrain.py`, deck.gl `TerrainLayer`), with docks drawn
+    x-ray on top.
+  - **Dock editor:** Select / Add / Move-gate tools, and the main map is locked while it is open.

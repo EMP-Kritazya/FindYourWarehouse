@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Map, useControl, type MapRef } from '@vis.gl/react-maplibre'
 import { MapLibreOverlay, type MapLibreOverlayProps } from '@deck.gl/maplibre'
+import { TerrainLayer } from '@deck.gl/geo-layers'
 import { BitmapLayer, ColumnLayer, LineLayer, ScatterplotLayer, TextLayer } from '@deck.gl/layers'
 import { loadTwin } from './WarehouseCard'
 import type { PickingInfo } from '@deck.gl/core'
@@ -57,6 +58,18 @@ export default function MapView() {
     }).catch(() => {})
     return () => { live = false }
   }, [selectedId])
+
+  // 3D site: Vexcel nDSM (DSM - DTM) heights with the Vexcel ortho draped on top (backend api_terrain.py)
+  const [terrain, setTerrain] = useState<{ id: number; url: string; texture: string; bounds: [number, number, number, number] } | null>(null)
+  useEffect(() => {
+    if (!selectedId) { setTerrain(null); return }
+    let live = true
+    fetch(`/api/twins/${selectedId}/terrain`).then((r) => (r.ok ? r.json() : null))
+      .then((t) => { if (live && t) setTerrain({ id: selectedId, url: t.url, texture: t.texture, bounds: t.bounds }) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [selectedId])
+  const show3d = !!terrain && terrain.id === selectedId
 
   // the selected property's footprint, doors and gate (docks/DockOverlay); its tower hides so the building shows
   const dock = useDockLayers(selectedId)
@@ -124,7 +137,12 @@ export default function MapView() {
     const near = place && (place.nearId ? data.find((d) => d.pin.id === place.nearId)?.pin : selPin)
     const ranked = data.filter((d) => d.rank && d.rank <= 20)
     return [
-      ortho && ortho.id === selectedId && new BitmapLayer({
+      show3d && new TerrainLayer({
+        id: `vexcel-3d-${terrain!.id}`, elevationData: terrain!.url, texture: terrain!.texture, bounds: terrain!.bounds,
+        elevationDecoder: { rScaler: 6553.6, gScaler: 25.6, bScaler: 0.1, offset: -10000 },
+        meshMaxError: 0.6, color: [255, 255, 255],
+      }),
+      !show3d && ortho && ortho.id === selectedId && new BitmapLayer({
         id: 'vexcel-ortho', image: ortho.url, bounds: ortho.bounds, opacity: 0.95,
         transitions: { opacity: 600 },
       }),
@@ -161,7 +179,8 @@ export default function MapView() {
         id: 'pin-shortlist', data: starred, radiusUnits: 'pixels', lineWidthUnits: 'pixels', stroked: true, filled: false,
         getPosition: (d) => [d.pin.lon, d.pin.lat], getRadius: 11, getLineColor: [251, 191, 36, 235], getLineWidth: 2,
       }),
-      ...dock.layers,
+      // docks are drawn through the 3D site surface (x-ray), so walls and roofs never hide them
+      ...dock.layers.map((l) => (l ? l.clone({ parameters: { depthCompare: "always", depthWriteEnabled: false } }) : l)),
       place && near && new LineLayer({
         id: 'place-link', data: [{ a: [near.lon, near.lat], b: [place.lon, place.lat] }], getSourcePosition: (d: { a: number[] }) => d.a as [number, number],
         getTargetPosition: (d: { b: number[] }) => d.b as [number, number], getColor: [251, 191, 36, 200], getWidth: 2, widthUnits: 'pixels',
@@ -179,7 +198,7 @@ export default function MapView() {
         updateTriggers: { getPosition: [zoom] },
       }),
     ]
-  }, [data, zoom, market, selectedId, hoveredId, highlightIds, compareIds, onHover, select, search, ortho, shortlist, place, dock])
+  }, [data, zoom, market, selectedId, hoveredId, highlightIds, compareIds, onHover, select, search, ortho, terrain, show3d, shortlist, place, dock])
 
   useEffect(() => () => mapApi.attach(null), [])
 

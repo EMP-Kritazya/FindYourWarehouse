@@ -122,6 +122,10 @@ def test_real_site_12896757_five_semis():
         pytest.skip("no exterior twin")
     res = plan.maneuver({"property_id": 12896757, "trucks": [{"type": "semi_53", "count": 5}]}, internal=True)
     assert len({v["id"] for v in res["vehicles"]}) == 5
+    assert res["summary"]["completed"] == 5, res["summary"]["headline"]
+    assert "timing" in res["summary"]
+    waited = [v for v in res["vehicles"] if any(k[6] == "wait" for k in v["keys"])]
+    assert waited, "queued trucks are drawn waiting on the street stub"
     done = [v for v in res["vehicles"] if v["status"] == "done"]
     for v in res["vehicles"]:
         if v["status"] != "done":
@@ -176,4 +180,18 @@ def test_real_242089_gate_not_in_notch_and_vans_complete():
     assert not plan._in_notch(yard, sc._gates[0]["x"], sc._gates[0]["y"])
     res = plan.maneuver({"property_id": 242089, "trucks": [{"type": "last_mile_van", "count": 2}]}, internal=True)
     assert all(v["status"] == "done" for v in res["vehicles"])
+    _check_run(res)
+
+
+def test_real_9235035_mixed_fleet():
+    from proinspect.config import BUILD
+    if not (BUILD / "twins" / "exterior" / "9235035.json").exists():
+        pytest.skip("no exterior twin")
+    res = plan.maneuver({"property_id": 9235035, "trucks": [{"type": "semi_53", "count": 2},
+                                                             {"type": "box_truck_26", "count": 1},
+                                                             {"type": "last_mile_van", "count": 1}]}, internal=True)
+    assert res["summary"]["completed"] >= 3, res["summary"]["headline"]
+    for v in res["vehicles"]:
+        if v["status"] != "done":
+            assert v["fail"]["where"] and "planner" not in v["fail"]["text"] or "not proof" in v["fail"]["text"]
     _check_run(res)

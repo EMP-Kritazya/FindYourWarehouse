@@ -24,7 +24,7 @@ export const mapApi = {
   },
   isLocked() { return locked },
   /** frame a footprint (lon/lat points) in the visible map area, looking down at a gentle pitch */
-  fitFootprint(points: [number, number][], pitch = 25) {
+  fitFootprint(points: [number, number][], pitch = 50) {
     if (!map || !points.length) return
     let w = 180, s = 90, e = -180, n = -90
     for (const [x, y] of points) { w = Math.min(w, x); e = Math.max(e, x); s = Math.min(s, y); n = Math.max(n, y) }
@@ -32,7 +32,7 @@ export const mapApi = {
     const cur = map.getPadding()
     const pad = { top: Math.max(0, want.top - (cur.top ?? 0)), bottom: Math.max(0, want.bottom - (cur.bottom ?? 0)),
       left: Math.max(0, want.left - (cur.left ?? 0)), right: Math.max(0, want.right - (cur.right ?? 0)) }
-    map.fitBounds([[w, s], [e, n]], { padding: pad, maxZoom: 19, pitch, bearing: 0, duration: 1200, essential: true })
+    map.fitBounds([[w, s], [e, n]], { padding: pad, maxZoom: 18.6, pitch, bearing: -20, duration: 1200, essential: true })
   },
   get() { return map },
   setPadding(p: Partial<typeof padding>) { padding = { ...padding, ...p } },

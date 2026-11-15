@@ -78,7 +78,8 @@ def yard_test(req: YardRequest):
 # ------------------------------------------------------------------ v3: multi-truck maneuver test
 MAN = OUT / "maneuver"
 MAN_CODE = [Path(__file__).resolve().parent / "yard" / f
-            for f in ("kinematics.py", "site.py", "run.py", "plan.py", "pursuit.py", "reserve.py", "route.py")]
+            for f in ("kinematics.py", "site.py", "run.py", "plan.py", "pursuit.py", "reserve.py", "route.py",
+                      "hybrid.py")]
 
 
 class ManTruck(BaseModel):

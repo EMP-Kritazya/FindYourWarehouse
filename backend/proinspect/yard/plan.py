@@ -199,6 +199,16 @@ def _gate(yard, cg, doors, override=None):
         return {"x": x, "y": y, "nx": nx, "ny": ny, "source": "user", "method": "gate given in the request"}
     sg = _store_gate(yard.property_id)
     cands = []
+    # 1) real entrances: OpenStreetMap driveways joining the public street, near this parcel (yard/roads.py)
+    try:
+        from proinspect.yard import roads
+        for c in roads.gate_candidates(yard.lat0, yard.lon0, yard.half, yard.parcel):
+            if c["dist_parcel_m"] <= 40.0:
+                cands.append((c["x"], c["y"], c["nx"], c["ny"], c["method"]))
+    except Exception:                                              # noqa: BLE001  (offline: aerial heuristics)
+        pass
+    if sg is not None and sg.get("source") != "user" and any("OpenStreetMap" in c[4] for c in cands):
+        sg = None                                                  # a real driveway beats the aerial guess
     if sg is not None:
         x, y = float(sg["x"]), float(sg["y"])
         nx, ny = _outward(yard.parcel, x, y) if yard.parcel is not None else (0.0, 1.0)
@@ -220,8 +230,8 @@ def _gate(yard, cg, doors, override=None):
         if any(math.hypot(x - a, y - b) < 8 for a, b in seen):
             return
         seen.append((x, y))
-        out.append({"x": float(x), "y": float(y), "nx": float(nx), "ny": float(ny), "source": "inferred",
-                    "method": why})
+        out.append({"x": float(x), "y": float(y), "nx": float(nx), "ny": float(ny),
+                    "source": "osm" if "OpenStreetMap" in why else "inferred", "method": why})
     for x, y, nx, ny, why in cands:
         i, o = _drivable_run(cg, x, y, nx, ny)
         if i >= 8 and o >= 12:
@@ -267,6 +277,111 @@ def _gate(yard, cg, doors, override=None):
     return out
 
 
+PARCEL_PAD_M = 4.0           # the parcel line often runs along the kerb: allow this much beyond it
+DRIVEWAY_HALF_M = 4.5        # an OSM driveway/service road is drivable this far either side of its centreline
+STREET_REACH_M = 60.0        # public road kept drivable this far from where a driveway joins it (approach/exit)
+
+
+def _bounded_grid(yard):
+    """The planning grid with HARD property bounds, and mapped driveways forced open.
+
+    allowed = parcel (+PARCEL_PAD_M) U OpenStreetMap service roads touching the parcel (+-DRIVEWAY_HALF_M) U the public
+    street within STREET_REACH_M of those driveways. Free cells outside `allowed` become kind 5 (outside the
+    property), so no route can cut across a neighbour's lot. On the mapped driveways themselves, objects and
+    "unpaved" cells (a parked trailer or a shadow in the one aerial snapshot) are cleared; buildings never are.
+    Without a parcel the grid is unchanged and the note says so."""
+    from scipy import ndimage
+    g = yard.grid
+    pm = getattr(yard, "parcel_mask", None)
+    k = g.kind.copy()
+    # the property's own ground: the area around its building(s) that adds up to CoStar's lot size
+    lot_m2 = None
+    try:
+        from proinspect.api_twin import catalog_record
+        acres = (catalog_record(yard.property_id) or {}).get("lot_acres")
+        lot_m2 = float(acres) * 4046.86 if acres else None
+    except Exception:                                             # noqa: BLE001
+        pass
+    own = getattr(yard, "building", None)
+    apron, D = None, None
+    if own is not None and own.any() and lot_m2:
+        dist = ndimage.distance_transform_edt(~own) * g.res
+        for D in range(15, 125, 5):
+            if (dist <= D).sum() * g.res ** 2 >= lot_m2:
+                break
+        apron = dist <= D
+    parcel_ok = pm is not None and pm.any() and lot_m2 is not None and 0.7 <= pm.sum() * g.res ** 2 / lot_m2 <= 1.6
+    if parcel_ok:
+        allowed = ndimage.binary_dilation(pm, iterations=max(1, int(PARCEL_PAD_M / g.res)))
+        how = f"the parcel line (+{PARCEL_PAD_M:.0f} m; matches CoStar's lot size)"
+    elif apron is not None:
+        allowed = apron if pm is None or not pm.any() or pm.sum() * g.res ** 2 < lot_m2 else (apron & ndimage.binary_dilation(pm, iterations=int(PARCEL_PAD_M / g.res)))
+        how = (f"the ground within {D} m of the building, which adds up to CoStar's {lot_m2 / 4046.86:.1f}-acre lot "
+               "(the aerial parcel " + ("is missing" if pm is None or not pm.any() else
+                                        f"is {pm.sum() * g.res ** 2 / lot_m2:.0%} of that lot, so it was not used alone") + ")")
+    elif pm is not None and pm.any():
+        allowed = ndimage.binary_dilation(pm, iterations=max(1, int(PARCEL_PAD_M / g.res)))
+        how = f"the parcel line (+{PARCEL_PAD_M:.0f} m; no CoStar lot size to check it against)"
+    else:
+        return g, ["no parcel boundary or lot size: routes are not limited to the property (assumption)"]
+    lanes = np.zeros_like(allowed)
+    n_drive = 0
+    try:
+        from proinspect.yard import roads
+        from shapely.geometry import LineString
+        from shapely.geometry import Point
+        ws = roads.ways(yard.lat0, yard.lon0, yard.half)
+        parcel = yard.parcel
+        service, public = [], []
+        for w in ws:
+            pts = roads._enu(yard.lat0, yard.lon0, w["nodes"])
+            if len(pts) < 2:
+                continue
+            hw = w["tags"].get("highway")
+            line = LineString(pts)
+            if hw == "service" and (parcel is None or line.distance(parcel) <= 10.0):
+                service.append(line)
+            elif hw in roads.PUBLIC:
+                public.append(line)
+        R, C = np.mgrid[0:g.n, 0:g.n]
+        X, Y = g.xy(R, C)
+
+        def paint(line, half, mask):
+            x0, y0, x1, y1 = line.bounds
+            sel = (X >= x0 - half) & (X <= x1 + half) & (Y >= y0 - half) & (Y <= y1 + half)
+            rs, cs = np.nonzero(sel)
+            if not len(rs):
+                return
+            from shapely import distance, points
+            d = distance(points(X[rs, cs], Y[rs, cs]), line)
+            mask[rs[d <= half], cs[d <= half]] = True
+        for line in service:
+            paint(line, DRIVEWAY_HALF_M, lanes)
+            n_drive += 1
+        junctions = [Point(line.coords[0]) for line in service] + [Point(line.coords[-1]) for line in service]
+        for line in public:
+            near = [j for j in junctions if line.distance(j) <= 6.0]
+            if near:
+                clip = line.intersection(near[0].buffer(STREET_REACH_M))
+                for j in near[1:]:
+                    clip = clip.union(line.intersection(j.buffer(STREET_REACH_M)))
+                for part in getattr(clip, "geoms", [clip]):
+                    if not part.is_empty and part.length > 1:
+                        paint(part, 6.0, lanes)
+    except Exception:                                             # noqa: BLE001  (offline: parcel-only bounds)
+        pass
+    allowed |= lanes
+    if not n_drive:   # no mapped driveway: let trucks reach the street over pavement just outside the parcel
+        near = ndimage.binary_dilation(allowed, iterations=int(30.0 / g.res))
+        allowed |= near & (yard.paved | yard.vehicle)
+    k[(k == 0) & ~allowed] = 5
+    k[lanes & np.isin(k, (2, 3))] = 0                            # mapped driveway: snapshot clutter is not a wall
+    notes = [f"trucks stay inside the property: {how}"
+             + (f" and on {n_drive} OpenStreetMap driveway(s) to the street" if n_drive else "")
+             + "; parked vehicles in the aerial snapshot are treated as movable"]
+    return kin.YardGrid(k, g.half, g.res, g.parcel), notes
+
+
 def scene_for(pid, gate_lonlat=None):
     from proinspect.yard import run as yrun
     from proinspect.yard import site
@@ -280,6 +395,8 @@ def scene_for(pid, gate_lonlat=None):
         smap = {"marked_in_scan": "confirmed", "detected_oblique": "proposed"}
         doors = [{**d, "status": src, "source": smap.get(src, "assumed")} for d in ds]
     road = yard.paved | yard.vehicle
+    yard.grid, bound_notes = _bounded_grid(yard)       # trucks stay on the property + its real driveway
+    notes += bound_notes
     cg = rt.CorridorGrid(yard.grid, road, yard.parcel_mask)
     ov = None
     if gate_lonlat:
@@ -866,9 +983,9 @@ def _approach(scene, key, door, side, spawn):
                         lookahead=(0.3, 6.0, 5.0, 8.0) if not m.articulated else None, max_dev=_dev_limit(m))
     if len(snap["poses"]) > 1:
         sp_ = snap["poses"].copy()
-        sp_[:, 0] += poses[-1, 0] + kin.DT
         sp_[:, 5] = 1
         poses = np.vstack([poses, sp_[1:]])
+    poses[:, 0] = np.arange(len(poses)) * kin.DT          # one uniform 0.1 s clock across search + snap
     Ef = poses[-1]
     resid = math.degrees(abs(kin._wrap((Ef[4] - Ef[3]) - (Q[4] - Q[3])))) if m.articulated else 0.0
     hd = math.degrees(abs(kin._wrap(Ef[3] - Q[3])))
@@ -919,6 +1036,7 @@ def _exit(scene, key, side, dock, exit_end):
                          "where": _fail_where(scene, r), "explored": r["explored"], "gap_m": round(c[2], 1)}}
     P = hy.integrate(m, list(Qe[1:5]), r["seq"])
     poses = hy.timed(P)
+    poses[:, 0] = np.arange(len(poses)) * kin.DT
     sdv, where, _ = pp.clearance(m, scene.grid, poses[:, :5], every=1)
     if sdv < 0:
         return {"fail": {"reason": "the re-integrated exit clips an obstacle", "cls": "planner", "leg": "exit",
@@ -944,7 +1062,13 @@ def build_options(scene, key, door, sides, spawn, exit_end, cache, out_sides=Non
         if "fail" in ap:
             fails.append({**ap["fail"], "turn": tin})
             continue
-        for tout, sout in (out_sides or sides).items():
+        osd = out_sides or sides
+
+        def aim(k):                       # the departure whose pull-out ends facing the street first
+            E = osd[k]["P"][-1]
+            return -math.cos(kin._wrap(math.atan2(exit_end[1] - E[2], exit_end[0] - E[1]) - E[3]))
+        for tout in sorted(osd, key=aim):
+            sout = osd[tout]
             ck2 = ("out", door["id"], key, tin, tout)
             if ck2 not in cache:
                 cache[ck2] = _exit(scene, key, sout, ap["dock"], exit_end)
@@ -1002,7 +1126,7 @@ def _spawn_exit(scene, key="semi_53"):
     out_len = float(np.dot(sp - gp, n))
     ee = None
     for L in np.arange(max(out_len, 6.0), -12.0, -1.0):
-        for lat in (LANE_OFFSET_M, 0.0):
+        for lat in (6.0, 4.5, LANE_OFFSET_M, 0.0):     # the exit end clear of trucks waiting at the spawn
             q = gp + n * L - right_in * lat
             fwd = q - n * (m.wheelbase + m.front_overhang)       # axle so the cab nose reaches q
             if _body_clear(scene, m, fwd[0], fwd[1], math.atan2(n[1], n[0])) >= TRAVEL_CLEAR_M:
@@ -1012,6 +1136,25 @@ def _spawn_exit(scene, key="semi_53"):
             break
     if ee is None:
         ee = gp + n * 4.0
+    # prefer an exit point on the street away from the spawn, so departing trucks do not cross the trucks waiting
+    # there: drivable (sd >= half width + 1.5 m), beyond the gate line, 20-45 m from the spawn, reachable
+    from proinspect.yard import hybrid as hy
+    gr = scene.grid
+    R_, C_ = np.mgrid[0:gr.n:4, 0:gr.n:4]
+    X_, Y_ = gr.xy(R_, C_)
+    ok_ = gr.sd[R_, C_] >= m.width / 2 + 1.5
+    beyond = (X_ - gp[0]) * n[0] + (Y_ - gp[1]) * n[1] > 4.0
+    dsp = np.hypot(X_ - sp[0], Y_ - sp[1])
+    dg = np.hypot(X_ - gp[0], Y_ - gp[1])
+    cand = ok_ & beyond & (dsp >= 20) & (dg <= 50)
+    if cand.any():
+        H = hy.Heuristic(gr, m, [(float(gp[0]), float(gp[1]))], buffer=1.5)
+        reach = np.isfinite(H.at(X_[cand], Y_[cand]))
+        if reach.any():
+            xs, ys = X_[cand][reach], Y_[cand][reach]
+            sc_ = np.minimum(dsp[cand][reach], 35.0) - 0.2 * dg[cand][reach]
+            i = int(np.argmax(sc_))
+            ee = np.array([xs[i], ys[i]])
     return (float(sp[0]), float(sp[1]), hin), (float(ee[0]), float(ee[1]))
 
 
@@ -1062,9 +1205,12 @@ def maneuver(req, scene=None, internal=False):
     table = rv.Table(horizon_s=max(arrivals) + WAIT_CAP_S + 1800, max_rects=2 * len(trucks) + 2)
     issues, events = [], []
     door_res = {}
+    t_d = _time.time()
+    scene.__dict__["_t_start"] = t_d
     for key in sorted(set(trucks), key=TYPES.index):
         for d in doors:
             door_res[(d["id"], key)] = door_options(scene, d, key)
+    _tick(scene, "doors", t_d)
     gates = getattr(scene, "_gates", None) or [scene.gate]
     t_g = _time.time()
     per_gate = []
@@ -1139,7 +1285,8 @@ def maneuver(req, scene=None, internal=False):
         best, first_block = None, None
         for o in cands:
             pen = 20.0 if o["door"]["id"] in used else 0.0      # spread trucks over doors on a near tie
-            res = _schedule(table, m, o, a, dwell, (best[1]["t_dock"] + best[2] - pen) if best else None)
+            res = _schedule(table, m, o, a, dwell, (best[1]["t_dock"] + best[2] - pen) if best else None,
+                            slots=o.setdefault("_slots", _queue_slots(scene, m, o)))
             if res.get("first_block") and first_block is None:
                 first_block = res["first_block"]
             if res.get("ok") and (best is None or res["t_dock"] + pen < best[1]["t_dock"] + best[2] - 1e-6):
@@ -1148,34 +1295,96 @@ def maneuver(req, scene=None, internal=False):
                     break                                   # no wait: nothing can be better
         if best is None:
             okd = [d for d in doors if door_res[(d["id"], key)]["status"] == "ok"]
+            where = None
             if not okd:
-                cls = "geometric" if all(door_res[(d["id"], key)].get("cls") == "geometric" for d in doors) else \
-                    ("assumption" if any(door_res[(d["id"], key)].get("cls") == "assumption" for d in doors)
-                     else "planner")
-                text = {"geometric": f"no tested door can take a {m.name}: the court in front of every door is "
-                                     "too shallow or blocked (aerial geometry)",
-                        "assumption": f"no door clears a {m.name} with the {kin.CLEARANCE_M / kin.FT:.0f} ft buffer",
-                        "planner": f"the planner found no back-in for a {m.name} at any door; this is a planner "
-                                   "limit, not proof that the yard cannot work"}[cls]
+                drs = [(d, door_res[(d["id"], key)]) for d in doors]
+                cls = "geometric" if all(r.get("cls") == "geometric" for _, r in drs) else \
+                    ("assumption" if any(r.get("cls") == "assumption" for _, r in drs) else "planner")
+                pick = next((r for _, r in drs if r.get("cls") == cls), drs[0][1])
+                dd = next(d for d, r in drs if r is pick)
+                where = (dd["x"], dd["y"])
+                text = (f"no tested door can take a {m.name}. Best case, {pick.get('text', '')}"
+                        + ("" if cls == "geometric" else "; a planner or data limit, not proof it is impossible"))
             elif not cands:
-                cls, text = "planner", (f"the planner could not drive a {m.name} from the gate to any feasible door "
-                                        "(approach or exit leg failed); a planner limit, not proof it is impossible")
+                lfs = [(f, d) for d in okd for f in door_res[(d["id"], key)].get("leg_fail", [])]
+                if lfs:
+                    f, d = min(lfs, key=lambda fd: fd[0].get("gap_m", 1e9))
+                    where = f.get("where") or (d["x"], d["y"])
+                    if "explored" in f:
+                        text = (f"{tid} ({m.name}): our planner explored {f['explored']:,} truck positions and got "
+                                f"within {f.get('gap_m', 0):.0f} m of door {d['id']}'s "
+                                f"{'pull-past position' if f['leg'] == 'approach' else 'way out to the street'}; the "
+                                "pin marks the closest point reached. A planner limit, not proof it is impossible")
+                    else:
+                        text = (f"{tid} ({m.name}) at door {d['id']}: {f['reason']}; a planner limit, not proof it "
+                                "is impossible")
+                else:
+                    text = (f"{tid} ({m.name}): no drivable approach was searched (all feasible doors were skipped); "
+                            "a planner limit")
+                cls = "planner"
             else:
                 cls, text = "congestion", (f"{tid} could not get a conflict-free slot within "
                                            f"{WAIT_CAP_S / 60:.0f} min of arriving")
             plans.append({"id": tid, "key": key, "arrive": a, "status": "failed" if cls != "congestion" else "waiting",
-                          "fail": {"class": cls, "text": text}})
+                          "fail": {"class": cls, "text": text, "where": where}})
             continue
         o, res, _ = best
         _commit(table, m, o, res, ti)
         plans.append({"id": tid, "key": key, "arrive": a, "status": "done", "opt": o, "res": res})
+    _tick(scene, "total", scene.__dict__["_t_start"])
     return _output(scene, req, trucks, plans, door_res, doors, spawn, exit_end, dwell, arrivals, internal)
 
 
-def _schedule(table, m, o, a, dwell, beat=None):
-    """Earliest conflict-free plan for option o arriving at a. Returns {ok, t0, t_dock, t_dep, ...}."""
+def _queue_slots(scene, m, o, n=6):
+    """Street-stub waiting places for option o: the spawn pose, then poses behind it along the arrival heading, each
+    with the straight drive (exact model) up to the spawn. [(state, pre_poses or None)]."""
+    E0 = o["legs"][0][1][0]
+    th = E0[3]
+    out = [(E0[1:5].copy(), None)]
+    L = m.overall_length + 4.0
+    for k in range(1, n):
+        d = k * L
+        x, y = E0[1] - d * math.cos(th), E0[2] - d * math.sin(th)
+        if _body_clear(scene, m, x, y, th) < TRAVEL_CLEAR_M:
+            break
+        st = [x, y, th, E0[4]]
+        P = [[0.0, *st, 1]]
+        s_ = list(st)
+        for i in range(int(round(d / 0.05))):
+            s_ = kin.step(m, s_, 1.0, 0.0, 0.05)
+            P.append([(i + 1) * 0.05, *s_, 1])
+        from proinspect.yard import hybrid as hy
+        T = hy.timed(np.array(P))
+        T[:, 0] = np.arange(len(T)) * kin.DT
+        out.append((np.array(st), _even(T[:-1]) if len(T) > 2 else None))
+    return out
+
+
+def _schedule(table, m, o, a, dwell, beat=None, slots=None):
+    """Earliest conflict-free plan for option o arriving at a: the truck waits (drawn) at a street slot, then drives
+    in. Each slot is tried in turn; with none usable the wait is not drawn. Returns {ok, t0, t_dock, t_dep, ...}."""
+    k_a0 = table.slice_of(a)
+    cap = int(WAIT_CAP_S / rv.SLICE_S)
+    first = None
+    for st, pp_ in list(slots or []) + [(None, None)]:
+        if st is None:
+            r = _schedule_slot(table, m, o, a, dwell, beat, None, None, None, None)
+        else:
+            wr = rv.body_rects(m, np.array([[0.0, *st]]))[0]
+            c = table.first_conflict(k_a0, np.repeat(wr[None], cap, axis=0))
+            if c is not None and c[0] == 0:
+                continue
+            r = _schedule_slot(table, m, o, a, dwell, beat, st, pp_, wr, None if c is None else c[0])
+        if r.get("ok"):
+            return r
+        first = first or r
+    return first or {"ok": False, "first_block": None}
+
+
+def _schedule_slot(table, m, o, a, dwell, beat, slot, pre, wait_rect, wait_lim):
     legs = o["legs"]
-    seg1 = np.concatenate([_rects(m, legs[0][1]), _rects(m, legs[1][1])])
+    pre_r = _rects(m, pre) if pre is not None else None
+    seg1 = np.concatenate(([pre_r] if pre_r is not None else []) + [_rects(m, legs[0][1]), _rects(m, legs[1][1])])
     dock = _rects(m, legs[1][1][-1:])[0]
     seg3 = np.concatenate([_rects(m, legs[2][1]), _rects(m, legs[3][1])])
     n_dwell = int(round(dwell / rv.SLICE_S))
@@ -1185,6 +1394,8 @@ def _schedule(table, m, o, a, dwell, beat=None):
     for k0 in range(k_a, k_a + int(WAIT_CAP_S / rv.SLICE_S), step):
         if beat is not None and (k0 + len(seg1)) * rv.SLICE_S >= beat:
             break
+        if slot is not None and wait_lim is not None and k0 - k_a > wait_lim:
+            break                                     # the waiting place gets in someone's way: no later start
         c = table.first_conflict(k0, seg1)
         if c is not None:
             if first_block is None:
@@ -1215,11 +1426,14 @@ def _schedule(table, m, o, a, dwell, beat=None):
             continue
         return {"ok": True, "k0": k0, "kd": kd, "kdep": kdep, "t0": k0 * rv.SLICE_S, "t_dock": kd * rv.SLICE_S,
                 "t_dep": kdep * rv.SLICE_S, "first_block": first_block, "dep_block": dep_block,
-                "n_dwell": n_dwell, "seg1": seg1, "seg3": seg3, "dock": dock}
+                "n_dwell": n_dwell, "seg1": seg1, "seg3": seg3, "dock": dock,
+                "slot": slot, "pre": pre, "wait_rect": wait_rect, "k_a": k_a}
     return {"ok": False, "first_block": first_block}
 
 
 def _commit(table, m, o, res, owner):
+    if res.get("slot") is not None and res["k0"] > res["k_a"]:
+        table.add(res["k_a"], np.repeat(res["wait_rect"][None], res["k0"] - res["k_a"], axis=0), owner)
     table.add(res["k0"], res["seg1"], owner)
     table.add(res["kd"], np.repeat(res["dock"][None], res["kdep"] - res["kd"], axis=0), owner)
     table.add(res["kdep"], res["seg3"], owner)
@@ -1237,11 +1451,20 @@ def _timeline(m, o, res):
     rows = []
     legs = o["legs"]
     t = res["t0"]
+    if res.get("slot") is not None:
+        for k in range(res["k_a"], res["k0"]):
+            rows.append([k * rv.SLICE_S, *res["slot"][:4], 0, "wait"])
+        pre = res.get("pre")
+        if pre is not None:
+            for i in range(0, len(pre), 2):
+                rows.append([t + pre[i, 0], *pre[i, 1:5], 1, "enter"])
+            t = t + pre[-1, 0] + kin.DT
+    t_ent = t
     ent = legs[0][1]
     ent_street = np.r_[0, np.cumsum(np.hypot(*np.diff(ent[:, 1:3], axis=0).T))] <= o["street_len"]
     for i in range(0, len(ent), 2):
         rows.append([t + ent[i, 0], *ent[i, 1:5], 1, "enter" if ent_street[i] else "to_door"])
-    t = res["t0"] + ent[-1, 0] + kin.DT
+    t = t_ent + ent[-1, 0] + kin.DT
     rev = legs[1][1]
     for i in range(0, len(rev), 2):
         rows.append([t + rev[i, 0], *rev[i, 1:5], -1, "reverse"])
@@ -1271,10 +1494,12 @@ def _output(scene, req, trucks, plans, door_res, doors, spawn, exit_end, dwell, 
         m = kin.model(p["key"])
         v = {"id": p["id"], "type": p["key"], "color_idx": vi, "status": p["status"], "arrive_s": p["arrive"]}
         if p["status"] != "done":
-            v.update(target={"kind": "street", "id": None}, keys=[], path=[], fail=p["fail"])
+            fw = p["fail"].get("where")
+            gl = list(ll(*fw)) if fw else list(ll(scene.gate["x"], scene.gate["y"]))
+            v.update(target={"kind": "street", "id": None}, keys=[], path=[],
+                     fail={**p["fail"], "where": gl})
             vehicles.append(v)
-            gl = ll(scene.gate["x"], scene.gate["y"])
-            issues.append({"class": p["fail"]["class"], "severity": "high", "where": list(gl), "text": p["fail"]["text"],
+            issues.append({"class": p["fail"]["class"], "severity": "high", "where": gl, "text": p["fail"]["text"],
                            "trucks": [p["id"]]})
             continue
         o, res = p["opt"], p["res"]
@@ -1306,7 +1531,8 @@ def _output(scene, req, trucks, plans, door_res, doors, spawn, exit_end, dwell, 
             events.append({"t_s": round(p["arrive"], 1), "truck": p["id"], "kind": "conflict", "where": where,
                            "blocked_by": who, "text": f"{p['id']}'s path to {d['id']} crosses "
                                                      f"{who or 'another truck'} here"})
-            events.append({"t_s": round(p["arrive"], 1), "truck": p["id"], "kind": "wait", "where": gl,
+            wq = list(ll(*res["slot"][:2])) if res.get("slot") is not None else gl
+            events.append({"t_s": round(p["arrive"], 1), "truck": p["id"], "kind": "wait", "where": wq,
                            "blocked_by": who, "seconds": round(wait_in, 1),
                            "text": f"{p['id']} waits {wait_in / 60:.1f} min on the street before the gate "
                                    f"for {who or 'the court'} to clear"})
@@ -1370,7 +1596,10 @@ def _output(scene, req, trucks, plans, door_res, doors, spawn, exit_end, dwell, 
                "docked_max": on_site["docked"], "moving_max": on_site["moving"],
                "makespan_s": round(makespan, 1), "total_wait_s": round(total_wait, 1),
                "worst_wait": {"truck": worst["id"], "s": round(worst.get("wait_s", 0), 1)} if worst else None,
-               "headline": _headline(plans, done, on_site, makespan, events, eq)}
+               "headline": _headline(plans, done, on_site, makespan, events, eq),
+               "timing": {**{k: round(v, 2) for k, v in scene.__dict__.get("_timing", {}).items()},
+                          "searches": len(scene.__dict__.get("_explored", [])),
+                          "states_explored": int(sum(scene.__dict__.get("_explored", [])))}}
     gate_ll = ll(scene.gate["x"], scene.gate["y"])
     doors_used = []
     for d in doors:
@@ -1420,7 +1649,7 @@ def _concurrency(tl):
             on[k] += 1
             if r[6] == "docked":
                 dk[k] += 1
-            else:
+            elif r[6] != "wait":
                 mv[k] += 1
     return {"moving_or_docked": max(on.values()), "docked": max(dk.values(), default=0),
             "moving": max(mv.values(), default=0)}
@@ -1454,5 +1683,13 @@ def _headline(plans, done, on_site, makespan, events, eq):
         s += " No truck had to wait."
     failed = [p for p in plans if p["status"] != "done"]
     if failed:
-        s += f" {len(failed)} could not be planned ({failed[0]['fail']['class']})."
+        from collections import Counter
+        cls, _ = Counter(p["fail"]["class"] for p in failed).most_common(1)[0]
+        kinds = sorted({eq[p["key"]]["name"] for p in failed})
+        why = {"planner": "our planner could not find a drive in or out for them (a planner limit, not proof it is "
+                          "impossible)",
+               "geometric": "the court geometry measured from the aerial imagery is too tight",
+               "assumption": "it depends on uncertain inputs (door positions or the unpaved mask)",
+               "congestion": "they could not get a conflict-free slot in time"}[cls]
+        s += f" {len(failed)} ({', '.join(kinds)}) could not be planned: {why}."
     return s

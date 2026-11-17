@@ -1,6 +1,6 @@
 <div align="center">
 
-# FindYourWarehouse
+# WareHouse PlayGround
 
 ### Test-drive a warehouse before you buy it.
 
@@ -28,7 +28,7 @@ A warehouse listing tells you square feet, clear height and a dock count. A buye
 
 Can five 53-foot semis get in, back into the docks and leave without blocking each other? How many pallet positions
 fit around *these* columns, under *this* sprinkler system, with *my* reach trucks? Today that takes site visits,
-a broker, and a consultant with a CAD file. ProInspect answers it in minutes, from data CoStar already has.
+a broker, and a consultant with a CAD file. Your WareHouse PlayGround answers it in minutes, from data CoStar already has.
 
 ## What it does
 
@@ -176,7 +176,7 @@ ELEVEN_LABS_API_KEY=...     # optional: voice (falls back to the browser voice)
 # 2. backend (FastAPI, port 8010)
 uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -r backend/requirements.txt
 #   (or: python3.12 -m venv .venv && .venv/bin/pip install -r backend/requirements.txt)
-cd backend && ../.venv/bin/uvicorn proinspect.api:app --port 8010
+cd backend && ../.venv/bin/uvicorn FindYourWarehouse.api:app --port 8010
 
 # 3. web app (Vite + React 19, port 8080: the port the Matterport key allows)
 cd web && npm install && npm run dev
@@ -190,7 +190,7 @@ Open **http://localhost:8080**, tell the analyst what you're looking for, and ho
 ```bash
 cd backend && ../.venv/bin/python -m pytest -q tests     # 260 backend tests
 cd web && npm run build                                   # type-check + production build
-cd backend && ../.venv/bin/python -m proinspect.precompute  # rebuild hero runs after sim changes
+cd backend && ../.venv/bin/python -m FindYourWarehouse.precompute  # rebuild hero runs after sim changes
 ```
 
 Restarting the backend? Kill only the listener: `kill $(lsof -ti tcp:8010 -sTCP:LISTEN)`. A plain
@@ -215,8 +215,8 @@ Restarting the backend? Kill only the listener: `kill $(lsof -ti tcp:8010 -sTCP:
 ## Project layout
 
 ```
-ProInspect/
-├── backend/proinspect/
+FindYourWarehouse/
+├── backend/FindYourWarehouse/
 │   ├── agents/          guide.py: the deepagents analyst (tools, UI commands, guardrails)
 │   ├── twin/            interior (Matterport mesh) and exterior (Vexcel) digital twins, fusion
 │   ├── yard/            Hybrid A*, pure pursuit, reservations, OSM gates, the maneuver test
